@@ -37,10 +37,15 @@ class DependencyGraphBuilder:
             f"{sanitized_repo_name}_filtered_folders.json"
         )
 
-        # Get target file from config if in single-file mode
-        target_file = getattr(self.config, 'target_file', None)
-
-        parser = DependencyParser(self.config.repo_path, target_file=target_file)
+        # Get custom include/exclude patterns from config
+        include_patterns = self.config.include_patterns if self.config.include_patterns else None
+        exclude_patterns = self.config.exclude_patterns if self.config.exclude_patterns else None
+        
+        parser = DependencyParser(
+            self.config.repo_path,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns
+        )
 
         filtered_folders = None
         # if os.path.exists(filtered_folders_path):

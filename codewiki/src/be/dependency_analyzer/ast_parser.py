@@ -17,36 +17,38 @@ logger.setLevel(logging.DEBUG)
 
 class DependencyParser:
     """Parser for extracting code components from multi-language repositories."""
-
-    def __init__(self, repo_path: str, target_file: str = None):
+    
+    def __init__(self, repo_path: str, include_patterns: List[str] = None, exclude_patterns: List[str] = None):
+        """
+        Initialize the dependency parser.
+        
+        Args:
+            repo_path: Path to the repository
+            include_patterns: File patterns to include (e.g., ["*.cs", "*.py"])
+            exclude_patterns: File/directory patterns to exclude (e.g., ["*Tests*"])
+        """
         self.repo_path = os.path.abspath(repo_path)
         self.target_file = target_file
         self.components: Dict[str, Node] = {}
         self.modules: Set[str] = set()
-
+        self.include_patterns = include_patterns
+        self.exclude_patterns = exclude_patterns
+        
         self.analysis_service = AnalysisService()
 
     def parse_repository(self, filtered_folders: List[str] = None) -> Dict[str, Node]:
         logger.debug(f"Parsing repository at {self.repo_path}")
-
-        # If target_file is set, create an include pattern for just that file
-        include_patterns = None
-        if self.target_file:
-            # Get relative path from repo root for the include pattern
-            target_path = os.path.abspath(self.target_file)
-            if target_path.startswith(self.repo_path):
-                rel_path = os.path.relpath(target_path, self.repo_path)
-                include_patterns = [rel_path]
-                logger.debug(f"Single-file mode: analyzing only {rel_path}")
-            else:
-                # File is outside repo, use absolute path as pattern
-                include_patterns = [target_path]
-                logger.debug(f"Single-file mode: analyzing {target_path}")
-
+        
+        # Log custom patterns if set
+        if self.include_patterns:
+            logger.info(f"Using custom include patterns: {self.include_patterns}")
+        if self.exclude_patterns:
+            logger.info(f"Using custom exclude patterns: {self.exclude_patterns}")
+        
         structure_result = self.analysis_service._analyze_structure(
-            self.repo_path,
-            include_patterns=include_patterns,
-            exclude_patterns=None
+            self.repo_path, 
+            include_patterns=self.include_patterns,
+            exclude_patterns=self.exclude_patterns
         )
 
         call_graph_result = self.analysis_service._analyze_call_graph(
