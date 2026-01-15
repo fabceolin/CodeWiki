@@ -1,5 +1,5 @@
 from pydantic_ai import RunContext, Tool, Agent
-from typing import Union
+from typing import Union, Any
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
 from codewiki.src.be.agent_tools.read_code_components import read_code_components_tool
@@ -45,7 +45,7 @@ def normalize_sub_module_specs(specs: Union[dict[str, list[str]], list[dict]]) -
 
 async def generate_sub_module_documentation(
     ctx: RunContext[CodeWikiDeps],
-    sub_module_specs: Union[dict[str, list[str]], list[dict]]
+    sub_module_specs: Any
 ) -> str:
     """Generate detailed description of a given sub-module specs to the sub-agents
 
