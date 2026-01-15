@@ -11,10 +11,10 @@ logger = logging.getLogger(__name__)
 
 class DependencyGraphBuilder:
     """Handles dependency analysis and graph building."""
-    
+
     def __init__(self, config: Config):
         self.config = config
-    
+
     def build_dependency_graph(self) -> tuple[Dict[str, Any], List[str]]:
         """
         Build and save dependency graph, returning components and leaf nodes.
@@ -37,7 +37,10 @@ class DependencyGraphBuilder:
             f"{sanitized_repo_name}_filtered_folders.json"
         )
 
-        parser = DependencyParser(self.config.repo_path)
+        # Get target file from config if in single-file mode
+        target_file = getattr(self.config, 'target_file', None)
+
+        parser = DependencyParser(self.config.repo_path, target_file=target_file)
 
         filtered_folders = None
         # if os.path.exists(filtered_folders_path):

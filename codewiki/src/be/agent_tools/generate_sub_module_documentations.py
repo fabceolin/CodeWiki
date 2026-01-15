@@ -1,4 +1,5 @@
 from pydantic_ai import RunContext, Tool, Agent
+from typing import Union
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
 from codewiki.src.be.agent_tools.read_code_components import read_code_components_tool
@@ -13,16 +14,54 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def normalize_sub_module_specs(specs: Union[dict[str, list[str]], list[dict]]) -> dict[str, list[str]]:
+    """Normalize sub_module_specs to dict format.
+
+    Handles both formats:
+    - Dict format (Claude): {"module_name": ["comp1", "comp2"], ...}
+    - List format (GPT/Azure OpenAI): [{"name": "module_name", "components": ["comp1", "comp2"]}, ...]
+
+    Also handles variations in key names that GPT models might use.
+    """
+    if isinstance(specs, dict):
+        return specs
+
+    if isinstance(specs, list):
+        result = {}
+        for item in specs:
+            if isinstance(item, dict):
+                # Try different key names that GPT models might use
+                name = item.get('name') or item.get('module_name') or item.get('sub_module_name') or item.get('submodule_name')
+                components = item.get('components') or item.get('core_components') or item.get('core_component_ids') or item.get('files') or []
+
+                if name:
+                    result[name] = components if isinstance(components, list) else [components]
+        return result
+
+    # Fallback: return empty dict
+    logger.warning(f"Unexpected sub_module_specs format: {type(specs)}")
+    return {}
+
+
 
 async def generate_sub_module_documentation(
     ctx: RunContext[CodeWikiDeps],
-    sub_module_specs: dict[str, list[str]]
+    sub_module_specs: Union[dict[str, list[str]], list[dict]]
 ) -> str:
     """Generate detailed description of a given sub-module specs to the sub-agents
 
     Args:
-        sub_module_specs: The specs of the sub-modules to generate documentation for. E.g. {"sub_module_1": ["core_component_1.1", "core_component_1.2"], "sub_module_2": ["core_component_2.1", "core_component_2.2"], ...}
+        sub_module_specs: The specs of the sub-modules to generate documentation for.
+            Accepts two formats:
+            - Dict format: {"sub_module_1": ["core_component_1.1", "core_component_1.2"], "sub_module_2": ["core_component_2.1", "core_component_2.2"], ...}
+            - List format: [{"name": "sub_module_1", "components": ["core_component_1.1", "core_component_1.2"]}, ...]
     """
+    # Normalize the input to dict format (handles both Claude and GPT model outputs)
+    sub_module_specs = normalize_sub_module_specs(sub_module_specs)
+
+    if not sub_module_specs:
+        logger.warning("No valid sub-module specs provided after normalization")
+        return "No valid sub-module specs provided."
 
     deps = ctx.deps
     previous_module_name = deps.current_module_name

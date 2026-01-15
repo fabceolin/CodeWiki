@@ -40,6 +40,13 @@ from codewiki.cli.models.job import GenerationOptions
     help="Output directory for generated documentation (default: ./docs)",
 )
 @click.option(
+    "--file",
+    "-f",
+    type=click.Path(exists=True),
+    default=None,
+    help="Generate documentation for a single file instead of the entire repository",
+)
+@click.option(
     "--create-branch",
     is_flag=True,
     help="Create a new git branch for documentation changes",
@@ -64,6 +71,7 @@ from codewiki.cli.models.job import GenerationOptions
 def generate_command(
     ctx,
     output: str,
+    file: Optional[str],
     create_branch: bool,
     github_pages: bool,
     no_cache: bool,
@@ -71,20 +79,24 @@ def generate_command(
 ):
     """
     Generate comprehensive documentation for a code repository.
-    
+
     Analyzes the current repository and generates documentation using LLM-powered
     analysis. Documentation is output to ./docs/ by default.
-    
+
     Examples:
-    
+
     \b
     # Basic generation
     $ codewiki generate
-    
+
+    \b
+    # Generate documentation for a single file
+    $ codewiki generate --file src/main.py
+
     \b
     # With git branch creation and GitHub Pages
     $ codewiki generate --create-branch --github-pages
-    
+
     \b
     # Force full regeneration
     $ codewiki generate --no-cache
@@ -194,6 +206,14 @@ def generate_command(
             custom_output=output if output != "docs" else None
         )
         
+        # Resolve target file to absolute path if provided
+        target_file = None
+        if file:
+            target_file = Path(file).resolve()
+            if not target_file.is_file():
+                raise RepositoryError(f"Target file not found: {target_file}")
+            logger.info(f"Single-file mode: {target_file.name}")
+
         # Create generator
         generator = CLIDocumentationGenerator(
             repo_path=repo_path,
@@ -206,7 +226,8 @@ def generate_command(
                 'api_key': api_key,
             },
             verbose=verbose,
-            generate_html=github_pages
+            generate_html=github_pages,
+            target_file=str(target_file) if target_file else None
         )
         
         # Run generation

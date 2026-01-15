@@ -26,34 +26,37 @@ from codewiki.src.config import Config as BackendConfig, set_cli_context
 class CLIDocumentationGenerator:
     """
     CLI adapter for documentation generation with progress reporting.
-    
+
     This class wraps the backend documentation generator and adds
     CLI-specific features like progress tracking and error handling.
     """
-    
+
     def __init__(
         self,
         repo_path: Path,
         output_dir: Path,
         config: Dict[str, Any],
         verbose: bool = False,
-        generate_html: bool = False
+        generate_html: bool = False,
+        target_file: str = None
     ):
         """
         Initialize the CLI documentation generator.
-        
+
         Args:
             repo_path: Repository path
             output_dir: Output directory
             config: LLM configuration
             verbose: Enable verbose output
             generate_html: Whether to generate HTML viewer
+            target_file: Optional path to a single file for focused documentation
         """
         self.repo_path = repo_path
         self.output_dir = output_dir
         self.config = config
         self.verbose = verbose
         self.generate_html = generate_html
+        self.target_file = target_file
         self.progress_tracker = ProgressTracker(total_stages=5, verbose=verbose)
         self.job = DocumentationJob()
         
@@ -136,7 +139,8 @@ class CLIDocumentationGenerator:
                 llm_api_key=self.config.get('api_key'),
                 main_model=self.config.get('main_model'),
                 cluster_model=self.config.get('cluster_model'),
-                fallback_model=self.config.get('fallback_model')
+                fallback_model=self.config.get('fallback_model'),
+                target_file=self.target_file
             )
             
             # Run backend documentation generation

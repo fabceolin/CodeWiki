@@ -51,6 +51,8 @@ class Config:
     main_model: str
     cluster_model: str
     fallback_model: str = FALLBACK_MODEL_1
+    # Single-file mode
+    target_file: str = None
     
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> 'Config':
@@ -80,11 +82,12 @@ class Config:
         llm_api_key: str,
         main_model: str,
         cluster_model: str,
-        fallback_model: str = FALLBACK_MODEL_1
+        fallback_model: str = FALLBACK_MODEL_1,
+        target_file: str = None
     ) -> 'Config':
         """
         Create configuration for CLI context.
-        
+
         Args:
             repo_path: Repository path
             output_dir: Output directory for generated docs
@@ -93,13 +96,14 @@ class Config:
             main_model: Primary model
             cluster_model: Clustering model
             fallback_model: Fallback model
-            
+            target_file: Optional path to a single file for focused documentation
+
         Returns:
             Config instance
         """
         repo_name = os.path.basename(os.path.normpath(repo_path))
         base_output_dir = os.path.join(output_dir, "temp")
-        
+
         return cls(
             repo_path=repo_path,
             output_dir=base_output_dir,
@@ -110,5 +114,6 @@ class Config:
             llm_api_key=llm_api_key,
             main_model=main_model,
             cluster_model=cluster_model,
-            fallback_model=fallback_model
+            fallback_model=fallback_model,
+            target_file=target_file
         )
