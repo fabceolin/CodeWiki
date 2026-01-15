@@ -59,28 +59,33 @@ def call_llm(
     prompt: str,
     config: Config,
     model: str = None,
-    temperature: float = 0.0
+    temperature: float = None
 ) -> str:
     """
     Call LLM with the given prompt.
-    
+
     Args:
         prompt: The prompt to send
         config: Configuration containing LLM settings
         model: Model name (defaults to config.main_model)
-        temperature: Temperature setting
-        
+        temperature: Temperature setting (None = don't send, for models that don't support it)
+
     Returns:
         LLM response text
     """
     if model is None:
         model = config.main_model
-    
+
     client = create_openai_client(config)
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-        max_tokens=config.max_tokens
-    )
+
+    # Build request kwargs - only include temperature if specified
+    kwargs = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": config.max_tokens
+    }
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+
+    response = client.chat.completions.create(**kwargs)
     return response.choices[0].message.content

@@ -63,6 +63,8 @@ class Config:
     max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
     # Agent instructions for customization
     agent_instructions: Optional[Dict[str, Any]] = None
+    # Single-file documentation mode
+    target_file: Optional[str] = None
     
     @property
     def include_patterns(self) -> Optional[List[str]]:
@@ -160,7 +162,8 @@ class Config:
         max_token_per_module: int = DEFAULT_MAX_TOKEN_PER_MODULE,
         max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE,
         max_depth: int = MAX_DEPTH,
-        agent_instructions: Optional[Dict[str, Any]] = None
+        agent_instructions: Optional[Dict[str, Any]] = None,
+        target_file: Optional[str] = None
     ) -> 'Config':
         """
         Create configuration for CLI context.
@@ -178,7 +181,8 @@ class Config:
             max_token_per_leaf_module: Maximum tokens per leaf module
             max_depth: Maximum depth for hierarchical decomposition
             agent_instructions: Custom agent instructions dict
-            
+            target_file: Optional path to single file for focused documentation
+
         Returns:
             Config instance
         """
@@ -199,5 +203,6 @@ class Config:
             max_tokens=max_tokens,
             max_token_per_module=max_token_per_module,
             max_token_per_leaf_module=max_token_per_leaf_module,
-            agent_instructions=agent_instructions
+            agent_instructions=agent_instructions,
+            target_file=target_file
         )

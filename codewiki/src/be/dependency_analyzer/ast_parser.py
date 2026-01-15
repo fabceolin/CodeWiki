@@ -18,14 +18,15 @@ logger.setLevel(logging.DEBUG)
 class DependencyParser:
     """Parser for extracting code components from multi-language repositories."""
     
-    def __init__(self, repo_path: str, include_patterns: List[str] = None, exclude_patterns: List[str] = None):
+    def __init__(self, repo_path: str, include_patterns: List[str] = None, exclude_patterns: List[str] = None, target_file: str = None):
         """
         Initialize the dependency parser.
-        
+
         Args:
             repo_path: Path to the repository
             include_patterns: File patterns to include (e.g., ["*.cs", "*.py"])
             exclude_patterns: File/directory patterns to exclude (e.g., ["*Tests*"])
+            target_file: Optional path to a single file for focused documentation
         """
         self.repo_path = os.path.abspath(repo_path)
         self.target_file = target_file

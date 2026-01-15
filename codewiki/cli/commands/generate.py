@@ -85,7 +85,6 @@ def parse_patterns(patterns_str: str) -> List[str]:
 )
 @click.option(
     "--focus",
-    "-f",
     type=str,
     default=None,
     help="Comma-separated modules/paths to focus on (e.g., 'src/core,src/api')",
@@ -374,7 +373,7 @@ def generate_command(
             },
             verbose=verbose,
             generate_html=github_pages,
-            target_file=str(target_file) if target_file else None
+            target_file=str(file) if file else None
         )
         
         # Run generation
