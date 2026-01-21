@@ -69,6 +69,10 @@ class Config:
     use_claude_code: bool = False
     claude_code_path: Optional[str] = None
     claude_code_timeout: int = 300
+    # Gemini CLI integration (larger context window)
+    use_gemini_code: bool = False
+    gemini_code_path: Optional[str] = None
+    gemini_code_timeout: int = 600
     
     @property
     def include_patterns(self) -> Optional[List[str]]:
@@ -171,6 +175,9 @@ class Config:
         use_claude_code: bool = False,
         claude_code_path: Optional[str] = None,
         claude_code_timeout: int = 300,
+        use_gemini_code: bool = False,
+        gemini_code_path: Optional[str] = None,
+        gemini_code_timeout: int = 600,
     ) -> 'Config':
         """
         Create configuration for CLI context.
@@ -192,6 +199,9 @@ class Config:
             use_claude_code: Whether to use Claude Code CLI as LLM backend
             claude_code_path: Optional path to claude CLI executable
             claude_code_timeout: Timeout for Claude Code CLI in seconds
+            use_gemini_code: Whether to use Gemini CLI as LLM backend (larger context)
+            gemini_code_path: Optional path to gemini CLI executable
+            gemini_code_timeout: Timeout for Gemini CLI in seconds
 
         Returns:
             Config instance
@@ -218,4 +228,7 @@ class Config:
             use_claude_code=use_claude_code,
             claude_code_path=claude_code_path,
             claude_code_timeout=claude_code_timeout,
+            use_gemini_code=use_gemini_code,
+            gemini_code_path=gemini_code_path,
+            gemini_code_timeout=gemini_code_timeout,
         )

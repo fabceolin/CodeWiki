@@ -147,6 +147,7 @@ class CLIDocumentationGenerator:
                 agent_instructions=self.config.get('agent_instructions'),
                 target_file=self.target_file,
                 use_claude_code=self.config.get('use_claude_code', False),
+                use_gemini_code=self.config.get('use_gemini_code', False),
             )
             
             # Run backend documentation generation
@@ -204,9 +205,13 @@ class CLIDocumentationGenerator:
 
         # Determine clustering method based on config
         use_claude_code = backend_config.use_claude_code
+        use_gemini_code = backend_config.use_gemini_code
         if use_claude_code:
             if self.verbose:
                 self.progress_tracker.update_stage(0.5, "Clustering modules with Claude Code CLI...")
+        elif use_gemini_code:
+            if self.verbose:
+                self.progress_tracker.update_stage(0.5, "Clustering modules with Gemini CLI...")
         else:
             if self.verbose:
                 self.progress_tracker.update_stage(0.5, "Clustering modules with LLM...")
@@ -229,6 +234,10 @@ class CLIDocumentationGenerator:
                     # Use Claude Code CLI for clustering
                     from codewiki.src.be.claude_code_adapter import claude_code_cluster
                     module_tree = claude_code_cluster(leaf_nodes, components, backend_config)
+                elif use_gemini_code:
+                    # Use Gemini CLI for clustering (larger context window)
+                    from codewiki.src.be.gemini_code_adapter import gemini_code_cluster
+                    module_tree = gemini_code_cluster(leaf_nodes, components, backend_config)
                 else:
                     # Use standard LLM clustering
                     module_tree = cluster_modules(leaf_nodes, components, backend_config)
