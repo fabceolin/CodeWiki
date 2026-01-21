@@ -145,7 +145,8 @@ class CLIDocumentationGenerator:
                 max_token_per_leaf_module=self.config.get('max_token_per_leaf_module', 16000),
                 max_depth=self.config.get('max_depth', 2),
                 agent_instructions=self.config.get('agent_instructions'),
-                target_file=self.target_file
+                target_file=self.target_file,
+                use_claude_code=self.config.get('use_claude_code', False),
             )
             
             # Run backend documentation generation
@@ -200,29 +201,42 @@ class CLIDocumentationGenerator:
         
         # Stage 2: Module Clustering
         self.progress_tracker.start_stage(2, "Module Clustering")
-        if self.verbose:
-            self.progress_tracker.update_stage(0.5, "Clustering modules with LLM...")
-        
-        # Import clustering function
+
+        # Determine clustering method based on config
+        use_claude_code = backend_config.use_claude_code
+        if use_claude_code:
+            if self.verbose:
+                self.progress_tracker.update_stage(0.5, "Clustering modules with Claude Code CLI...")
+        else:
+            if self.verbose:
+                self.progress_tracker.update_stage(0.5, "Clustering modules with LLM...")
+
+        # Import clustering functions
         from codewiki.src.be.cluster_modules import cluster_modules
         from codewiki.src.utils import file_manager
         from codewiki.src.config import FIRST_MODULE_TREE_FILENAME, MODULE_TREE_FILENAME
-        
+
         working_dir = str(self.output_dir.absolute())
         file_manager.ensure_directory(working_dir)
         first_module_tree_path = os.path.join(working_dir, FIRST_MODULE_TREE_FILENAME)
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
-        
+
         try:
             if os.path.exists(first_module_tree_path):
                 module_tree = file_manager.load_json(first_module_tree_path)
             else:
-                module_tree = cluster_modules(leaf_nodes, components, backend_config)
+                if use_claude_code:
+                    # Use Claude Code CLI for clustering
+                    from codewiki.src.be.claude_code_adapter import claude_code_cluster
+                    module_tree = claude_code_cluster(leaf_nodes, components, backend_config)
+                else:
+                    # Use standard LLM clustering
+                    module_tree = cluster_modules(leaf_nodes, components, backend_config)
                 file_manager.save_json(module_tree, first_module_tree_path)
-            
+
             file_manager.save_json(module_tree, module_tree_path)
             self.job.module_count = len(module_tree)
-            
+
             if self.verbose:
                 self.progress_tracker.update_stage(1.0, f"Created {len(module_tree)} modules")
         except Exception as e:

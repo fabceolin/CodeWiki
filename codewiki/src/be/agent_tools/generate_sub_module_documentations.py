@@ -45,7 +45,7 @@ def normalize_sub_module_specs(specs: Union[dict[str, list[str]], list[dict]]) -
 
 async def generate_sub_module_documentation(
     ctx: RunContext[CodeWikiDeps],
-    sub_module_specs: Any
+    sub_module_specs: dict[str, list[str]] | list[dict[str, Any]]
 ) -> str:
     """Generate detailed description of a given sub-module specs to the sub-agents
 

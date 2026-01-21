@@ -65,6 +65,10 @@ class Config:
     agent_instructions: Optional[Dict[str, Any]] = None
     # Single-file documentation mode
     target_file: Optional[str] = None
+    # Claude Code CLI integration
+    use_claude_code: bool = False
+    claude_code_path: Optional[str] = None
+    claude_code_timeout: int = 300
     
     @property
     def include_patterns(self) -> Optional[List[str]]:
@@ -163,7 +167,10 @@ class Config:
         max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE,
         max_depth: int = MAX_DEPTH,
         agent_instructions: Optional[Dict[str, Any]] = None,
-        target_file: Optional[str] = None
+        target_file: Optional[str] = None,
+        use_claude_code: bool = False,
+        claude_code_path: Optional[str] = None,
+        claude_code_timeout: int = 300,
     ) -> 'Config':
         """
         Create configuration for CLI context.
@@ -182,6 +189,9 @@ class Config:
             max_depth: Maximum depth for hierarchical decomposition
             agent_instructions: Custom agent instructions dict
             target_file: Optional path to single file for focused documentation
+            use_claude_code: Whether to use Claude Code CLI as LLM backend
+            claude_code_path: Optional path to claude CLI executable
+            claude_code_timeout: Timeout for Claude Code CLI in seconds
 
         Returns:
             Config instance
@@ -204,5 +214,8 @@ class Config:
             max_token_per_module=max_token_per_module,
             max_token_per_leaf_module=max_token_per_leaf_module,
             agent_instructions=agent_instructions,
-            target_file=target_file
+            target_file=target_file,
+            use_claude_code=use_claude_code,
+            claude_code_path=claude_code_path,
+            claude_code_timeout=claude_code_timeout,
         )

@@ -158,9 +158,16 @@ class DocumentationGenerator:
                     # Process the module
                     if self.is_leaf_module(module_info):
                         logger.info(f"📄 Processing leaf module: {module_key}")
-                        final_module_tree = await self.agent_orchestrator.process_module(
-                            module_name, components, module_info["components"], module_path, working_dir
-                        )
+                        if self.config.use_claude_code:
+                            # Use Claude Code CLI for documentation generation
+                            final_module_tree = await self._process_module_with_claude_code(
+                                module_name, components, module_info["components"],
+                                module_tree, working_dir
+                            )
+                        else:
+                            final_module_tree = await self.agent_orchestrator.process_module(
+                                module_name, components, module_info["components"], module_path, working_dir
+                            )
                     else:
                         logger.info(f"📁 Processing parent module: {module_key}")
                         final_module_tree = await self.generate_parent_module_docs(
@@ -182,9 +189,15 @@ class DocumentationGenerator:
         else:
             logger.info(f"Processing whole repo because repo can fit in the context window")
             repo_name = os.path.basename(os.path.normpath(self.config.repo_path))
-            final_module_tree = await self.agent_orchestrator.process_module(
-                repo_name, components, leaf_nodes, [], working_dir
-            )
+            if self.config.use_claude_code:
+                # Use Claude Code CLI for documentation generation
+                final_module_tree = await self._process_module_with_claude_code(
+                    repo_name, components, leaf_nodes, module_tree, working_dir
+                )
+            else:
+                final_module_tree = await self.agent_orchestrator.process_module(
+                    repo_name, components, leaf_nodes, [], working_dir
+                )
 
             # save final_module_tree to module_tree.json
             file_manager.save_json(final_module_tree, os.path.join(working_dir, MODULE_TREE_FILENAME))
@@ -231,21 +244,80 @@ class DocumentationGenerator:
         )
         
         try:
-            parent_docs = call_llm(prompt, self.config)
-            
+            # Use Claude Code CLI if configured, otherwise use direct LLM call
+            if self.config.use_claude_code:
+                from codewiki.src.be.claude_code_adapter import claude_code_generate_overview
+                parent_docs = claude_code_generate_overview(prompt, self.config)
+            else:
+                parent_docs = call_llm(prompt, self.config)
+
             # Parse and save parent documentation
-            parent_content = parent_docs.split("<OVERVIEW>")[1].split("</OVERVIEW>")[0].strip()
-            # parent_content = prompt
+            if "<OVERVIEW>" in parent_docs and "</OVERVIEW>" in parent_docs:
+                parent_content = parent_docs.split("<OVERVIEW>")[1].split("</OVERVIEW>")[0].strip()
+            else:
+                # Claude Code might return the content directly without tags
+                parent_content = parent_docs.strip()
             file_manager.save_text(parent_content, parent_docs_path)
-            
+
             logger.debug(f"Successfully generated parent documentation for: {module_name}")
             return module_tree
-            
+
         except Exception as e:
             logger.error(f"Error generating parent documentation for {module_name}: {str(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             raise
-    
+
+    async def _process_module_with_claude_code(
+        self,
+        module_name: str,
+        components: Dict[str, Any],
+        core_component_ids: List[str],
+        module_tree: Dict[str, Any],
+        working_dir: str,
+    ) -> Dict[str, Any]:
+        """
+        Process a module using Claude Code CLI for documentation generation.
+
+        Args:
+            module_name: Name of the module
+            components: All code components
+            core_component_ids: Component IDs in this module
+            module_tree: The full module tree
+            working_dir: Output directory for documentation
+
+        Returns:
+            Updated module tree
+        """
+        from codewiki.src.be.claude_code_adapter import claude_code_generate_docs
+
+        # Check if docs already exist
+        docs_path = os.path.join(working_dir, f"{module_name}.md")
+        if os.path.exists(docs_path):
+            logger.info(f"✓ Module docs already exists at {docs_path}")
+            return module_tree
+
+        try:
+            # Generate documentation using Claude Code CLI
+            doc_content = claude_code_generate_docs(
+                module_name=module_name,
+                core_component_ids=core_component_ids,
+                components=components,
+                module_tree=module_tree,
+                config=self.config,
+                output_path=working_dir,
+            )
+
+            # Save the generated documentation
+            file_manager.save_text(doc_content, docs_path)
+            logger.info(f"✓ Generated documentation for {module_name}")
+
+            return module_tree
+
+        except Exception as e:
+            logger.error(f"Claude Code documentation generation failed for {module_name}: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
+
     async def run(self) -> None:
         """Run the complete documentation generation process using dynamic programming."""
         try:

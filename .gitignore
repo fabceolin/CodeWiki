@@ -72,3 +72,6 @@ Thumbs.db
 *.tmp
 *.log
 *.bak
+# BMAD (local only)
+.bmad-core/
+.bmad-*/

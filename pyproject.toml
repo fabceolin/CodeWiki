@@ -68,6 +68,9 @@ dev = [
     "mypy>=1.5.0",
     "ruff>=0.1.0",
 ]
+poc = [
+    "the-edge-agent[llm]>=0.9.69",
+]
 
 [project.scripts]
 codewiki = "codewiki.cli.main:cli"
@@ -120,5 +123,5 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=codewiki --cov-report=term-missing"
+addopts = "-v"
 
