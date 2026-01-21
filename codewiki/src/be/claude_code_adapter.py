@@ -48,7 +48,8 @@ from codewiki.src.be.utils import is_complex_module
 logger = logging.getLogger(__name__)
 
 # Default timeout for Claude Code CLI (seconds)
-DEFAULT_CLAUDE_CODE_TIMEOUT = 300
+# Increased from 300s to 900s (15 min) for larger modules
+DEFAULT_CLAUDE_CODE_TIMEOUT = 900
 
 # Default max prompt size (in estimated tokens)
 # Claude Code CLI limit is ~790K chars (~198K tokens)
@@ -148,6 +149,10 @@ def _invoke_claude_code(
     logger.info(f"Invoking Claude Code CLI: {cli_path}")
 
     try:
+        # Inherit environment and add any Claude-specific env vars
+        import os
+        env = os.environ.copy()
+
         result = subprocess.run(
             cmd,
             input=prompt,  # Pass prompt via stdin
@@ -155,6 +160,7 @@ def _invoke_claude_code(
             text=True,
             timeout=timeout,
             cwd=working_dir,
+            env=env,  # Pass environment variables including CLAUDE_CODE_OAUTH_TOKEN
         )
 
         if result.returncode != 0:
