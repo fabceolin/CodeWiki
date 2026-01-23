@@ -68,7 +68,7 @@ class Config:
     # Claude Code CLI integration
     use_claude_code: bool = False
     claude_code_path: Optional[str] = None
-    claude_code_timeout: int = 900
+    claude_code_timeout: int = 1800
     # Gemini CLI integration (larger context window)
     use_gemini_code: bool = False
     gemini_code_path: Optional[str] = None
@@ -174,7 +174,7 @@ class Config:
         target_file: Optional[str] = None,
         use_claude_code: bool = False,
         claude_code_path: Optional[str] = None,
-        claude_code_timeout: int = 900,
+        claude_code_timeout: int = 1800,
         use_gemini_code: bool = False,
         gemini_code_path: Optional[str] = None,
         gemini_code_timeout: int = 600,

@@ -307,9 +307,14 @@ class DocumentationGenerator:
                 output_path=working_dir,
             )
 
-            # Save the generated documentation
-            file_manager.save_text(doc_content, docs_path)
-            logger.info(f"✓ Generated documentation for {module_name}")
+            # Check if Claude Code already created the file (via str_replace_editor)
+            # If so, don't overwrite with the response (which may be a confirmation message)
+            if os.path.exists(docs_path):
+                logger.info(f"✓ Generated documentation for {module_name} (file created by Claude Code)")
+            else:
+                # Claude returned documentation in stdout, save it
+                file_manager.save_text(doc_content, docs_path)
+                logger.info(f"✓ Generated documentation for {module_name}")
 
             return module_tree
 
