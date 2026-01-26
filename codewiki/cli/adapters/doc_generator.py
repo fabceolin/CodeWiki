@@ -148,6 +148,8 @@ class CLIDocumentationGenerator:
                 target_file=self.target_file,
                 use_claude_code=self.config.get('use_claude_code', False),
                 use_gemini_code=self.config.get('use_gemini_code', False),
+                selective_modules=self.config.get('selective_modules'),
+                force_regenerate=self.config.get('force_regenerate', False),
             )
             
             # Run backend documentation generation

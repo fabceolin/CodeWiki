@@ -33,10 +33,12 @@ def version():
 # Import commands
 from codewiki.cli.commands.config import config_group
 from codewiki.cli.commands.generate import generate_command
+from codewiki.cli.commands.affected import affected_modules
 
 # Register command groups
 cli.add_command(config_group)
 cli.add_command(generate_command, name="generate")
+cli.add_command(affected_modules, name="affected-modules")
 
 
 def main():

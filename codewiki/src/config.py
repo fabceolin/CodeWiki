@@ -73,6 +73,9 @@ class Config:
     use_gemini_code: bool = False
     gemini_code_path: Optional[str] = None
     gemini_code_timeout: int = 600
+    # Selective module regeneration
+    selective_modules: Optional[List[str]] = None
+    force_regenerate: bool = False
     
     @property
     def include_patterns(self) -> Optional[List[str]]:
@@ -178,6 +181,8 @@ class Config:
         use_gemini_code: bool = False,
         gemini_code_path: Optional[str] = None,
         gemini_code_timeout: int = 600,
+        selective_modules: Optional[List[str]] = None,
+        force_regenerate: bool = False,
     ) -> 'Config':
         """
         Create configuration for CLI context.
@@ -202,6 +207,8 @@ class Config:
             use_gemini_code: Whether to use Gemini CLI as LLM backend (larger context)
             gemini_code_path: Optional path to gemini CLI executable
             gemini_code_timeout: Timeout for Gemini CLI in seconds
+            selective_modules: List of module paths to selectively regenerate
+            force_regenerate: Whether to force regeneration even if docs exist
 
         Returns:
             Config instance
@@ -231,4 +238,6 @@ class Config:
             use_gemini_code=use_gemini_code,
             gemini_code_path=gemini_code_path,
             gemini_code_timeout=gemini_code_timeout,
+            selective_modules=selective_modules,
+            force_regenerate=force_regenerate,
         )

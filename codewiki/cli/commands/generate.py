@@ -87,7 +87,26 @@ def parse_patterns(patterns_str: str) -> List[str]:
     "--focus",
     type=str,
     default=None,
-    help="Comma-separated modules/paths to focus on (e.g., 'src/core,src/api')",
+    help="Comma-separated modules/paths to focus on during analysis (e.g., 'src/core,src/api'). "
+         "Note: --focus affects analysis scope; --modules affects which modules to regenerate. "
+         "Both can be used together.",
+)
+@click.option(
+    "--modules",
+    "-m",
+    type=str,
+    default=None,
+    help="Comma-separated module paths to regenerate (e.g., 'backend/auth,utils'). "
+         "Use with output from 'codewiki affected-modules'. "
+         "Note: --modules filters regeneration; --focus filters analysis scope. "
+         "Both can be used together for targeted incremental updates.",
+)
+@click.option(
+    "--force",
+    "-F",
+    is_flag=True,
+    help="Force regeneration of specified modules, overwriting existing documentation. "
+         "Requires --modules; has no effect when used alone.",
 )
 @click.option(
     "--doc-type",
@@ -153,6 +172,8 @@ def generate_command(
     include: Optional[str],
     exclude: Optional[str],
     focus: Optional[str],
+    modules: Optional[str],
+    force: bool,
     doc_type: Optional[str],
     instructions: Optional[str],
     verbose: bool,
@@ -218,6 +239,23 @@ def generate_command(
     \b
     # Use Gemini CLI as the LLM backend (larger context window)
     $ codewiki generate --use-gemini-code
+
+    \b
+    # Regenerate specific modules (skip if docs exist)
+    $ codewiki generate --modules "backend/auth,backend/api/handlers"
+
+    \b
+    # Force regenerate specific modules (overwrite existing)
+    $ codewiki generate --modules "backend/auth,utils" --force
+
+    \b
+    # Integration with affected-modules
+    $ AFFECTED=$(codewiki affected-modules --old-dir ./v1 --new-dir ./v2)
+    $ codewiki generate --modules "$AFFECTED" --force
+
+    \b
+    # Combine selective regeneration with other options
+    $ codewiki generate --modules "core,api" --force --use-claude-code --verbose
     """
     logger = create_logger(verbose=verbose)
     start_time = time.time()
@@ -418,6 +456,23 @@ def generate_command(
         if use_gemini_code and verbose:
             logger.debug("Gemini CLI mode enabled (large context window)")
 
+        # Parse and validate selective modules
+        selective_modules = parse_patterns(modules) if modules else None
+        force_regenerate = force
+
+        # Validate --force usage: warn if used without --modules
+        if force_regenerate and not selective_modules:
+            logger.warning(
+                "--force flag has no effect without --modules. "
+                "To regenerate all modules, remove existing documentation first."
+            )
+            force_regenerate = False
+
+        # Log selective regeneration settings if verbose
+        if verbose and selective_modules:
+            logger.debug(f"Selective modules: {selective_modules}")
+            logger.debug(f"Force regenerate: {force_regenerate}")
+
         # Create generator
         generator = CLIDocumentationGenerator(
             repo_path=repo_path,
@@ -438,6 +493,9 @@ def generate_command(
                 # CLI integrations
                 'use_claude_code': use_claude_code,
                 'use_gemini_code': use_gemini_code,
+                # Selective regeneration
+                'selective_modules': selective_modules,
+                'force_regenerate': force_regenerate,
             },
             verbose=verbose,
             generate_html=github_pages,

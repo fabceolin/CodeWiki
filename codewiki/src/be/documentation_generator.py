@@ -1,12 +1,67 @@
 import logging
 import os
 import json
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Set, Tuple, Optional
 from copy import deepcopy
 import traceback
 
 # Configure logging and monitoring
 logger = logging.getLogger(__name__)
+
+
+def should_process_module(
+    module_key: str,
+    selective_modules: Optional[List[str]],
+    all_module_keys: Set[str]
+) -> Tuple[bool, str]:
+    """
+    Determine if a module should be processed based on selective filter.
+
+    Args:
+        module_key: The module path as a string (e.g., "backend/auth")
+        selective_modules: List of module paths to selectively regenerate
+        all_module_keys: Set of all module keys in the tree
+
+    Returns:
+        (should_process, reason) tuple
+    """
+    if not selective_modules:
+        return True, "no filter"
+
+    for pattern in selective_modules:
+        # Exact match
+        if module_key == pattern:
+            return True, f"exact match: {pattern}"
+
+        # Child of specified module (prefix match)
+        # "backend/auth" matches filter "backend" when module is child
+        if module_key.startswith(pattern + "/"):
+            return True, f"child of: {pattern}"
+
+        # Parent of specified module (for overview coherence)
+        # "backend" matches filter "backend/auth" when module is parent
+        if pattern.startswith(module_key + "/"):
+            return True, f"parent of: {pattern}"
+
+    return False, "not in filter"
+
+
+def get_required_parents(selective_modules: List[str]) -> Set[str]:
+    """
+    Get all parent module paths that need regeneration for overview coherence.
+
+    Args:
+        selective_modules: List of module paths to selectively regenerate
+
+    Returns:
+        Set of parent module paths
+    """
+    parents = set()
+    for module_path in selective_modules:
+        parts = module_path.split("/")
+        for i in range(1, len(parts)):
+            parents.add("/".join(parts[:i]))
+    return parents
 
 # Local imports
 from codewiki.src.be.dependency_analyzer import DependencyGraphBuilder
@@ -131,11 +186,34 @@ class DocumentationGenerator:
         first_module_tree_path = os.path.join(working_dir, FIRST_MODULE_TREE_FILENAME)
         module_tree = file_manager.load_json(module_tree_path)
         first_module_tree = file_manager.load_json(first_module_tree_path)
-        
+
         # Get processing order (leaf modules first)
         processing_order = self.get_processing_order(first_module_tree)
 
-        
+        # Get selective modules and force flag from config
+        selective_modules = self.config.selective_modules
+        force_regenerate = self.config.force_regenerate
+
+        # Build set of all module keys for filtering
+        all_module_keys = {"/".join(path) for path, _ in processing_order}
+
+        # Calculate and log summary for selective regeneration
+        modules_to_process_count = 0
+        modules_skipped_count = 0
+        if selective_modules:
+            required_parents = get_required_parents(selective_modules)
+            for module_path, _ in processing_order:
+                module_key = "/".join(module_path)
+                should_process, _ = should_process_module(module_key, selective_modules, all_module_keys)
+                if should_process:
+                    modules_to_process_count += 1
+                else:
+                    modules_skipped_count += 1
+            logger.info(f"📊 Selective regeneration: {modules_to_process_count} of {len(all_module_keys)} total modules")
+        else:
+            modules_to_process_count = len(all_module_keys)
+            logger.info(f"📊 Full generation: {len(all_module_keys)} modules")
+
         # Process modules in dependency order
         final_module_tree = module_tree
         processed_modules = set()
@@ -149,12 +227,23 @@ class DocumentationGenerator:
                         module_info = module_info[path_part]
                         if path_part != module_path[-1]:  # Not the last part
                             module_info = module_info.get("children", {})
-                    
+
                     # Skip if already processed
                     module_key = "/".join(module_path)
                     if module_key in processed_modules:
                         continue
-                    
+
+                    # Apply selective filter
+                    if selective_modules:
+                        should_process, reason = should_process_module(
+                            module_key, selective_modules, all_module_keys
+                        )
+                        if not should_process:
+                            logger.debug(f"⏭️  Skipping {module_key}: {reason}")
+                            continue
+                        else:
+                            logger.debug(f"✓ Including {module_key}: {reason}")
+
                     # Process the module
                     if self.is_leaf_module(module_info):
                         logger.info(f"📄 Processing leaf module: {module_key}")
@@ -162,7 +251,7 @@ class DocumentationGenerator:
                             # Use Claude Code CLI for documentation generation
                             final_module_tree = await self._process_module_with_claude_code(
                                 module_name, components, module_info["components"],
-                                module_tree, working_dir
+                                module_tree, working_dir, force_regenerate
                             )
                         else:
                             final_module_tree = await self.agent_orchestrator.process_module(
@@ -171,28 +260,31 @@ class DocumentationGenerator:
                     else:
                         logger.info(f"📁 Processing parent module: {module_key}")
                         final_module_tree = await self.generate_parent_module_docs(
-                            module_path, working_dir
+                            module_path, working_dir, force_regenerate
                         )
-                    
+
                     processed_modules.add(module_key)
-                    
+
                 except Exception as e:
                     logger.error(f"Failed to process module {module_key}: {str(e)}")
                     logger.error(f"Traceback: {traceback.format_exc()}")
                     continue
 
             # Generate repo overview
-            logger.info(f"📚 Generating repository overview")
-            final_module_tree = await self.generate_parent_module_docs(
-                [], working_dir
-            )
+            # Only regenerate if not using selective modules, or if any module was processed
+            should_regen_overview = not selective_modules or modules_to_process_count > 0
+            if should_regen_overview:
+                logger.info(f"📚 Generating repository overview")
+                final_module_tree = await self.generate_parent_module_docs(
+                    [], working_dir, force_regenerate
+                )
         else:
             logger.info(f"Processing whole repo because repo can fit in the context window")
             repo_name = os.path.basename(os.path.normpath(self.config.repo_path))
             if self.config.use_claude_code:
                 # Use Claude Code CLI for documentation generation
                 final_module_tree = await self._process_module_with_claude_code(
-                    repo_name, components, leaf_nodes, module_tree, working_dir
+                    repo_name, components, leaf_nodes, module_tree, working_dir, force_regenerate
                 )
             else:
                 final_module_tree = await self.agent_orchestrator.process_module(
@@ -209,26 +301,39 @@ class DocumentationGenerator:
         
         return working_dir
 
-    async def generate_parent_module_docs(self, module_path: List[str], 
-                                        working_dir: str) -> Dict[str, Any]:
-        """Generate documentation for a parent module based on its children's documentation."""
+    async def generate_parent_module_docs(
+        self,
+        module_path: List[str],
+        working_dir: str,
+        force_regenerate: bool = False
+    ) -> Dict[str, Any]:
+        """Generate documentation for a parent module based on its children's documentation.
+
+        Args:
+            module_path: List of path components to the module
+            working_dir: Output directory for documentation
+            force_regenerate: If True, regenerate even if docs exist
+
+        Returns:
+            Updated module tree
+        """
         module_name = module_path[-1] if len(module_path) >= 1 else os.path.basename(os.path.normpath(self.config.repo_path))
 
         logger.info(f"Generating parent documentation for: {module_name}")
-        
+
         # Load module tree
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
         module_tree = file_manager.load_json(module_tree_path)
 
         # check if overview docs already exists
         overview_docs_path = os.path.join(working_dir, OVERVIEW_FILENAME)
-        if os.path.exists(overview_docs_path):
+        if not force_regenerate and os.path.exists(overview_docs_path):
             logger.info(f"✓ Overview docs already exists at {overview_docs_path}")
             return module_tree
 
         # check if parent docs already exists
         parent_docs_path = os.path.join(working_dir, f"{module_name if len(module_path) >= 1 else OVERVIEW_FILENAME.replace('.md', '')}.md")
-        if os.path.exists(parent_docs_path):
+        if not force_regenerate and os.path.exists(parent_docs_path):
             logger.info(f"✓ Parent docs already exists at {parent_docs_path}")
             return module_tree
 
@@ -274,6 +379,7 @@ class DocumentationGenerator:
         core_component_ids: List[str],
         module_tree: Dict[str, Any],
         working_dir: str,
+        force_regenerate: bool = False,
     ) -> Dict[str, Any]:
         """
         Process a module using Claude Code CLI for documentation generation.
@@ -284,6 +390,7 @@ class DocumentationGenerator:
             core_component_ids: Component IDs in this module
             module_tree: The full module tree
             working_dir: Output directory for documentation
+            force_regenerate: If True, regenerate even if docs exist
 
         Returns:
             Updated module tree
@@ -292,7 +399,7 @@ class DocumentationGenerator:
 
         # Check if docs already exist
         docs_path = os.path.join(working_dir, f"{module_name}.md")
-        if os.path.exists(docs_path):
+        if not force_regenerate and os.path.exists(docs_path):
             logger.info(f"✓ Module docs already exists at {docs_path}")
             return module_tree
 
