@@ -1,3 +1,6 @@
+
+
+
 config/agent_config.yaml
 tool/add_header.sh
 
@@ -75,3 +78,8 @@ Thumbs.db
 # BMAD (local only)
 .bmad-core/
 .bmad-*/
+codewiki/src/config.py.orig
+codewiki/cli/commands/generate.py.orig
+codewiki/src/be/dependency_analyzer/ast_parser.py.orig
+codewiki/src/be/dependency_analyzer/dependency_graphs_builder.py.orig
+codewiki/cli/adapters/doc_generator.py.orig

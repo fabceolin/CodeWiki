@@ -177,47 +177,119 @@ class CLIDocumentationGenerator:
     
     async def _run_backend_generation(self, backend_config: BackendConfig):
         """Run the backend documentation generation with progress tracking."""
-        
+
+        # Get resume point from config
+        resume_from = self.config.get('resume_from')
+
+        # Determine total phases based on resume point
+        if resume_from == 'document':
+            total_phases = 3  # document, html (optional), finalization
+            current_phase = 1
+        elif resume_from == 'cluster':
+            total_phases = 4  # cluster, document, html (optional), finalization
+            current_phase = 1
+        else:
+            total_phases = 5  # full run
+
         # Stage 1: Dependency Analysis
-        self.progress_tracker.start_stage(1, "Dependency Analysis")
-        if self.verbose:
-            self.progress_tracker.update_stage(0.2, "Initializing dependency analyzer...")
-        
-        # Create documentation generator
-        doc_generator = DocumentationGenerator(backend_config)
-        
-        if self.verbose:
-            self.progress_tracker.update_stage(0.5, "Parsing source files...")
-        
-        # Build dependency graph
-        try:
-            components, leaf_nodes = doc_generator.graph_builder.build_dependency_graph()
-            self.job.statistics.total_files_analyzed = len(components)
-            self.job.statistics.leaf_nodes = len(leaf_nodes)
-            
+        if resume_from in ('cluster', 'document'):
+            # Skip dependency analysis - load from file
+            self.progress_tracker.start_stage(1, "Dependency Analysis (skipped - resuming)")
             if self.verbose:
-                self.progress_tracker.update_stage(1.0, f"Found {len(leaf_nodes)} leaf nodes")
-        except Exception as e:
-            raise APIError(f"Dependency analysis failed: {e}")
-        
-        self.progress_tracker.complete_stage()
+                self.progress_tracker.update_stage(0.5, "Loading existing dependency graph...")
+
+            # Load dependency graph from file
+            import json
+            dependency_graph_path = self.output_dir / "dependency_graph.json"
+            try:
+                with open(dependency_graph_path, 'r', encoding='utf-8') as f:
+                    graph_data = json.load(f)
+
+                # Convert to Node objects
+                from codewiki.src.be.dependency_analyzer.models.core import Node
+                components = {}
+                for comp_id, comp_data in graph_data.get("components", {}).items():
+                    components[comp_id] = Node(
+                        id=comp_id,
+                        name=comp_data.get("name", ""),
+                        component_type=comp_data.get("type", "unknown"),
+                        file_path=comp_data.get("file_path", ""),
+                        relative_path=comp_data.get("relative_path", ""),
+                        source_code=comp_data.get("source_code"),
+                        depends_on=set(comp_data.get("depends_on", [])),
+                        start_line=comp_data.get("start_line", 0),
+                        end_line=comp_data.get("end_line", 0),
+                    )
+                leaf_nodes = graph_data.get("leaf_nodes", [])
+
+                self.job.statistics.total_files_analyzed = len(components)
+                self.job.statistics.leaf_nodes = len(leaf_nodes)
+
+                if self.verbose:
+                    self.progress_tracker.update_stage(1.0, f"Loaded {len(components)} components, {len(leaf_nodes)} leaf nodes")
+            except Exception as e:
+                raise APIError(f"Failed to load dependency graph: {e}")
+
+            self.progress_tracker.complete_stage()
+
+            # Create documentation generator with loaded components
+            doc_generator = DocumentationGenerator(backend_config)
+        else:
+            # Full dependency analysis
+            self.progress_tracker.start_stage(1, "Phase 1/3: Dependency Analysis")
+            if self.verbose:
+                self.progress_tracker.update_stage(0.2, "Initializing dependency analyzer...")
+
+            # Create documentation generator
+            doc_generator = DocumentationGenerator(backend_config)
+
+            if self.verbose:
+                self.progress_tracker.update_stage(0.5, "Parsing source files...")
+
+            # Build dependency graph
+            try:
+                components, leaf_nodes = doc_generator.graph_builder.build_dependency_graph()
+                self.job.statistics.total_files_analyzed = len(components)
+                self.job.statistics.leaf_nodes = len(leaf_nodes)
+
+                # Save dependency graph for potential resume
+                import json
+                from datetime import datetime
+                output_data = {
+                    "metadata": {
+                        "generated_at": datetime.utcnow().isoformat() + "Z",
+                        "repo_path": str(self.repo_path),
+                        "total_components": len(components),
+                        "total_leaf_nodes": len(leaf_nodes),
+                    },
+                    "components": {
+                        comp_id: {
+                            "name": comp.name,
+                            "type": comp.component_type,
+                            "file_path": comp.file_path,
+                            "relative_path": comp.relative_path,
+                            "source_code": comp.source_code,
+                            "depends_on": list(comp.depends_on),
+                            "start_line": comp.start_line,
+                            "end_line": comp.end_line,
+                        }
+                        for comp_id, comp in components.items()
+                    },
+                    "leaf_nodes": leaf_nodes,
+                }
+                dependency_graph_path = self.output_dir / "dependency_graph.json"
+                file_manager.ensure_directory(str(self.output_dir))
+                with open(dependency_graph_path, 'w', encoding='utf-8') as f:
+                    json.dump(output_data, f, indent=2)
+
+                if self.verbose:
+                    self.progress_tracker.update_stage(1.0, f"Found {len(leaf_nodes)} leaf nodes")
+            except Exception as e:
+                raise APIError(f"Dependency analysis failed: {e}")
+
+            self.progress_tracker.complete_stage()
         
         # Stage 2: Module Clustering
-        self.progress_tracker.start_stage(2, "Module Clustering")
-
-        # Determine clustering method based on config
-        use_claude_code = backend_config.use_claude_code
-        use_gemini_code = backend_config.use_gemini_code
-        if use_claude_code:
-            if self.verbose:
-                self.progress_tracker.update_stage(0.5, "Clustering modules with Claude Code CLI...")
-        elif use_gemini_code:
-            if self.verbose:
-                self.progress_tracker.update_stage(0.5, "Clustering modules with Gemini CLI...")
-        else:
-            if self.verbose:
-                self.progress_tracker.update_stage(0.5, "Clustering modules with LLM...")
-
         # Import clustering functions
         from codewiki.src.be.cluster_modules import cluster_modules
         from codewiki.src.utils import file_manager
@@ -228,35 +300,69 @@ class CLIDocumentationGenerator:
         first_module_tree_path = os.path.join(working_dir, FIRST_MODULE_TREE_FILENAME)
         module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
 
-        try:
-            if os.path.exists(first_module_tree_path):
-                module_tree = file_manager.load_json(first_module_tree_path)
-            else:
-                if use_claude_code:
-                    # Use Claude Code CLI for clustering
-                    from codewiki.src.be.claude_code_adapter import claude_code_cluster
-                    module_tree = claude_code_cluster(leaf_nodes, components, backend_config)
-                elif use_gemini_code:
-                    # Use Gemini CLI for clustering (larger context window)
-                    from codewiki.src.be.gemini_code_adapter import gemini_code_cluster
-                    module_tree = gemini_code_cluster(leaf_nodes, components, backend_config)
-                else:
-                    # Use standard LLM clustering
-                    module_tree = cluster_modules(leaf_nodes, components, backend_config)
-                file_manager.save_json(module_tree, first_module_tree_path)
-
-            file_manager.save_json(module_tree, module_tree_path)
-            self.job.module_count = len(module_tree)
-
+        if resume_from == 'document':
+            # Skip clustering - load from file
+            self.progress_tracker.start_stage(2, "Module Clustering (skipped - resuming)")
             if self.verbose:
-                self.progress_tracker.update_stage(1.0, f"Created {len(module_tree)} modules")
-        except Exception as e:
-            raise APIError(f"Module clustering failed: {e}")
-        
-        self.progress_tracker.complete_stage()
+                self.progress_tracker.update_stage(0.5, "Loading existing module tree...")
+
+            try:
+                module_tree = file_manager.load_json(first_module_tree_path)
+                self.job.module_count = len(module_tree)
+                if self.verbose:
+                    self.progress_tracker.update_stage(1.0, f"Loaded {len(module_tree)} modules")
+            except Exception as e:
+                raise APIError(f"Failed to load module tree: {e}")
+
+            self.progress_tracker.complete_stage()
+        else:
+            # Full clustering
+            phase_label = "Phase 2/3: Module Clustering" if not resume_from else "Module Clustering"
+            self.progress_tracker.start_stage(2, phase_label)
+
+            # Determine clustering method based on config
+            use_claude_code = backend_config.use_claude_code
+            use_gemini_code = backend_config.use_gemini_code
+            if use_claude_code:
+                if self.verbose:
+                    self.progress_tracker.update_stage(0.5, "Clustering modules with Claude Code CLI...")
+            elif use_gemini_code:
+                if self.verbose:
+                    self.progress_tracker.update_stage(0.5, "Clustering modules with Gemini CLI...")
+            else:
+                if self.verbose:
+                    self.progress_tracker.update_stage(0.5, "Clustering modules with LLM...")
+
+            try:
+                if os.path.exists(first_module_tree_path):
+                    module_tree = file_manager.load_json(first_module_tree_path)
+                else:
+                    if use_claude_code:
+                        # Use Claude Code CLI for clustering
+                        from codewiki.src.be.claude_code_adapter import claude_code_cluster
+                        module_tree = claude_code_cluster(leaf_nodes, components, backend_config)
+                    elif use_gemini_code:
+                        # Use Gemini CLI for clustering (larger context window)
+                        from codewiki.src.be.gemini_code_adapter import gemini_code_cluster
+                        module_tree = gemini_code_cluster(leaf_nodes, components, backend_config)
+                    else:
+                        # Use standard LLM clustering
+                        module_tree = cluster_modules(leaf_nodes, components, backend_config)
+                    file_manager.save_json(module_tree, first_module_tree_path)
+
+                file_manager.save_json(module_tree, module_tree_path)
+                self.job.module_count = len(module_tree)
+
+                if self.verbose:
+                    self.progress_tracker.update_stage(1.0, f"Created {len(module_tree)} modules")
+            except Exception as e:
+                raise APIError(f"Module clustering failed: {e}")
+
+            self.progress_tracker.complete_stage()
         
         # Stage 3: Documentation Generation
-        self.progress_tracker.start_stage(3, "Documentation Generation")
+        phase_label = "Phase 3/3: Documentation Generation" if not resume_from else "Documentation Generation"
+        self.progress_tracker.start_stage(3, phase_label)
         if self.verbose:
             self.progress_tracker.update_stage(0.1, "Generating module documentation...")
         

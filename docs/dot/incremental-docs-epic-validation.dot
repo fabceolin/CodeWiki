@@ -1,0 +1,26 @@
+digraph incremental_docs_epic_validation {
+    rankdir=TB;
+    node [shape=box];
+
+    Start [label="Start", shape=ellipse];
+    End [label="End", shape=ellipse];
+
+    // Phase 1: Story 1 - Affected Modules Detection
+    // No dependencies, can run first
+    subgraph cluster_phase1 {
+        label="1. Detection Story";
+        story_1 [label="incremental-doc-update-affected-modules"];
+    }
+
+    // Phase 2: Story 2 - Selective Module Regeneration
+    // Depends on Story 1 (uses output format from affected-modules)
+    subgraph cluster_phase2 {
+        label="2. Regeneration Story";
+        story_2 [label="selective-module-regeneration"];
+    }
+
+    // Execution order
+    Start -> story_1;
+    story_1 -> story_2;
+    story_2 -> End;
+}

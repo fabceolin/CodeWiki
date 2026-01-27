@@ -1,0 +1,47 @@
+schema: 1
+story: "phased-cli-4"
+story_title: "Add Resume Capability to `generate` Command"
+gate: PASS
+status_reason: "Resume functionality implemented correctly with proper validation, phase skipping, and clear error messages."
+reviewer: "Quinn (Test Architect)"
+updated: "2026-01-27T00:00:00Z"
+
+waiver: { active: false }
+
+top_issues: []
+
+risk_summary:
+  totals: { critical: 0, high: 0, medium: 0, low: 0 }
+  recommendations:
+    must_fix: []
+    monitor: []
+
+quality_score: 100
+expires: "2026-02-10T00:00:00Z"
+
+evidence:
+  tests_reviewed: 15
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: "No security implications in resume functionality"
+  performance:
+    status: PASS
+    notes: "Resume capability significantly reduces re-work during recovery"
+  reliability:
+    status: PASS
+    notes: "Validates prerequisites before resuming, saves dependency graph for future resume"
+  maintainability:
+    status: PASS
+    notes: "Clean integration with existing generate command, backward compatible"
+
+recommendations:
+  immediate: []
+  future:
+    - action: "Consider auto-detecting last successful phase for automatic resume suggestion"
+      refs: ["codewiki/cli/commands/generate.py:522-549"]

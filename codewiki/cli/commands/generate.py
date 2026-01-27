@@ -161,6 +161,13 @@ def parse_patterns(patterns_str: str) -> List[str]:
     is_flag=True,
     help="Use Gemini CLI as the LLM backend instead of direct API calls (supports larger context)",
 )
+@click.option(
+    "--resume-from",
+    type=click.Choice(['analyze', 'cluster', 'document'], case_sensitive=False),
+    default=None,
+    help="Resume generation from a specific phase (analyze, cluster, or document). "
+         "Requires intermediate files from previous run.",
+)
 @click.pass_context
 def generate_command(
     ctx,
@@ -183,6 +190,7 @@ def generate_command(
     max_depth: Optional[int],
     use_claude_code: bool,
     use_gemini_code: bool,
+    resume_from: Optional[str],
 ):
     """
     Generate comprehensive documentation for a code repository.
@@ -256,46 +264,48 @@ def generate_command(
     \b
     # Combine selective regeneration with other options
     $ codewiki generate --modules "core,api" --force --use-claude-code --verbose
+
+    \b
+    # Resume from clustering phase (skip dependency analysis)
+    $ codewiki generate --resume-from cluster
+
+    \b
+    # Resume from documentation phase (skip analysis and clustering)
+    $ codewiki generate --resume-from document
+
+    \b
+    # Resume with other options
+    $ codewiki generate --resume-from document --use-claude-code --verbose
     """
     logger = create_logger(verbose=verbose)
     start_time = time.time()
-    
+
     # Suppress httpx INFO logs
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    
+
     try:
+        # Validate --resume-from with --file incompatibility
+        if resume_from and file:
+            raise ConfigurationError(
+                "--resume-from cannot be used with --file.\n\n"
+                "Single file mode (--file) does not support resume functionality.\n"
+                "Remove --file to use --resume-from, or remove --resume-from for single file mode."
+            )
+
         # Pre-generation checks
         logger.step("Validating configuration...", 1, 4)
-        
-        # Load configuration
-        config_manager = ConfigManager()
-        if not config_manager.load():
-            raise ConfigurationError(
-                "Configuration not found or invalid.\n\n"
-                "Please run 'codewiki config set' to configure your LLM API credentials:\n"
-                "  codewiki config set --api-key <your-api-key> --base-url <api-url> \\\n"
-                "    --main-model <model> --cluster-model <model>\n\n"
-                "For more help: codewiki config --help"
-            )
-        
-        if not config_manager.is_configured():
-            raise ConfigurationError(
-                "Configuration is incomplete. Please run 'codewiki config validate'"
-            )
-        
-        config = config_manager.get_config()
-        api_key = config_manager.get_api_key()
 
-        logger.success("Configuration valid")
-
-        # Validate that only one CLI backend is selected
+        # Check CLI backend mutual exclusivity first (before config validation)
         if use_claude_code and use_gemini_code:
             raise ConfigurationError(
                 "Cannot use both --use-claude-code and --use-gemini-code.\n\n"
                 "Please select only one CLI backend."
             )
 
-        # Validate Claude Code CLI if flag is set
+        # Determine if using a CLI backend (which handles its own authentication)
+        using_cli_backend = use_claude_code or use_gemini_code
+
+        # Validate CLI binary availability before config checks
         if use_claude_code:
             import shutil
             claude_path = shutil.which("claude")
@@ -310,7 +320,6 @@ def generate_command(
                 logger.debug(f"Claude Code CLI found: {claude_path}")
             logger.success("Claude Code CLI available")
 
-        # Validate Gemini CLI if flag is set
         if use_gemini_code:
             import shutil
             gemini_path = shutil.which("gemini")
@@ -324,6 +333,43 @@ def generate_command(
             if verbose:
                 logger.debug(f"Gemini CLI found: {gemini_path}")
             logger.success("Gemini CLI available")
+
+        # Load configuration
+        config_manager = ConfigManager()
+        config_loaded = config_manager.load()
+
+        # Only require full configuration when NOT using CLI backends
+        # CLI backends handle their own authentication, so API key is not needed
+        if not using_cli_backend:
+            if not config_loaded:
+                raise ConfigurationError(
+                    "Configuration not found or invalid.\n\n"
+                    "Please run 'codewiki config set' to configure your LLM API credentials:\n"
+                    "  codewiki config set --api-key <your-api-key> --base-url <api-url> \\\n"
+                    "    --main-model <model> --cluster-model <model>\n\n"
+                    "For more help: codewiki config --help"
+                )
+
+            if not config_manager.is_configured():
+                raise ConfigurationError(
+                    "Configuration is incomplete. Please run 'codewiki config validate'"
+                )
+
+        config = config_manager.get_config()
+        api_key = config_manager.get_api_key()
+
+        # Create default configuration for CLI backend mode if no config exists
+        if config is None and using_cli_backend:
+            from codewiki.cli.models.config import Configuration
+            config = Configuration(
+                base_url="",  # Not used by CLI backends
+                main_model="",  # Not used by CLI backends
+                cluster_model="",  # Not used by CLI backends
+            )
+            if verbose:
+                logger.debug("Using default configuration for CLI backend mode")
+
+        logger.success("Configuration valid")
 
         # Validate repository
         logger.step("Validating repository...", 2, 4)
@@ -473,6 +519,34 @@ def generate_command(
             logger.debug(f"Selective modules: {selective_modules}")
             logger.debug(f"Force regenerate: {force_regenerate}")
 
+        # Validate resume prerequisites
+        if resume_from:
+            if verbose:
+                logger.debug(f"Resume from: {resume_from}")
+
+            if resume_from.lower() in ('cluster', 'document'):
+                # Resume from cluster or document requires dependency_graph.json
+                dependency_graph_path = output_dir / "dependency_graph.json"
+                if not dependency_graph_path.exists():
+                    raise ConfigurationError(
+                        f"Cannot resume from '{resume_from}': dependency_graph.json not found.\n\n"
+                        f"Expected file: {dependency_graph_path}\n\n"
+                        "Run 'codewiki generate' or 'codewiki analyze' first to create the dependency graph."
+                    )
+                logger.success(f"Found dependency_graph.json for resume")
+
+            if resume_from.lower() == 'document':
+                # Resume from document requires first_module_tree.json
+                first_module_tree_path = output_dir / "first_module_tree.json"
+                module_tree_path = output_dir / "module_tree.json"
+                if not first_module_tree_path.exists():
+                    raise ConfigurationError(
+                        f"Cannot resume from 'document': first_module_tree.json not found.\n\n"
+                        f"Expected file: {first_module_tree_path}\n\n"
+                        "Run 'codewiki generate' or 'codewiki cluster' first to create the module tree."
+                    )
+                logger.success(f"Found module tree files for resume")
+
         # Create generator
         generator = CLIDocumentationGenerator(
             repo_path=repo_path,
@@ -496,6 +570,8 @@ def generate_command(
                 # Selective regeneration
                 'selective_modules': selective_modules,
                 'force_regenerate': force_regenerate,
+                # Resume capability
+                'resume_from': resume_from.lower() if resume_from else None,
             },
             verbose=verbose,
             generate_html=github_pages,

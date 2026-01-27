@@ -34,11 +34,17 @@ def version():
 from codewiki.cli.commands.config import config_group
 from codewiki.cli.commands.generate import generate_command
 from codewiki.cli.commands.affected import affected_modules
+from codewiki.cli.commands.analyze import analyze_command
+from codewiki.cli.commands.cluster import cluster_command
+from codewiki.cli.commands.document import document_command
 
 # Register command groups
 cli.add_command(config_group)
 cli.add_command(generate_command, name="generate")
 cli.add_command(affected_modules, name="affected-modules")
+cli.add_command(analyze_command, name="analyze")
+cli.add_command(cluster_command, name="cluster")
+cli.add_command(document_command, name="document")
 
 
 def main():
