@@ -1,0 +1,61 @@
+{
+    "backend.auth.login": {
+        "id": "backend.auth.login",
+        "name": "login",
+        "component_type": "function",
+        "file_path": "/repo/src/backend/auth/login.py",
+        "relative_path": "src/backend/auth/login.py",
+        "source_code": "def login(user, pwd): pass",
+        "depends_on": ["backend.auth.validate", "backend.db.users"],
+        "start_line": 1,
+        "end_line": 5,
+        "parameters": ["user", "pwd"]
+    },
+    "backend.auth.validate": {
+        "id": "backend.auth.validate",
+        "name": "validate",
+        "component_type": "function",
+        "file_path": "/repo/src/backend/auth/validate.py",
+        "relative_path": "src/backend/auth/validate.py",
+        "source_code": "def validate(token): pass",
+        "depends_on": [],
+        "start_line": 1,
+        "end_line": 3,
+        "parameters": ["token"]
+    },
+    "backend.db.users": {
+        "id": "backend.db.users",
+        "name": "Users",
+        "component_type": "class",
+        "file_path": "/repo/src/backend/db/users.py",
+        "relative_path": "src/backend/db/users.py",
+        "source_code": "class Users: pass",
+        "depends_on": ["backend.db.connection"],
+        "start_line": 1,
+        "end_line": 10
+    },
+    "backend.db.connection": {
+        "id": "backend.db.connection",
+        "name": "get_connection",
+        "component_type": "function",
+        "file_path": "/repo/src/backend/db/connection.py",
+        "relative_path": "src/backend/db/connection.py",
+        "source_code": "def get_connection(): pass",
+        "depends_on": [],
+        "start_line": 1,
+        "end_line": 5,
+        "parameters": []
+    },
+    "utils.helpers": {
+        "id": "utils.helpers",
+        "name": "helper",
+        "component_type": "function",
+        "file_path": "/repo/src/utils/helpers.py",
+        "relative_path": "src/utils/helpers.py",
+        "source_code": "def helper(): pass",
+        "depends_on": [],
+        "start_line": 1,
+        "end_line": 3,
+        "parameters": []
+    }
+}

@@ -1,0 +1,50 @@
+{
+    "A": {
+        "id": "A",
+        "name": "ComponentA",
+        "component_type": "function",
+        "file_path": "/repo/src/a.py",
+        "relative_path": "src/a.py",
+        "source_code": "def a(): b()",
+        "depends_on": ["B"],
+        "start_line": 1,
+        "end_line": 2,
+        "parameters": []
+    },
+    "B": {
+        "id": "B",
+        "name": "ComponentB",
+        "component_type": "function",
+        "file_path": "/repo/src/b.py",
+        "relative_path": "src/b.py",
+        "source_code": "def b(): c()",
+        "depends_on": ["C"],
+        "start_line": 1,
+        "end_line": 2,
+        "parameters": []
+    },
+    "C": {
+        "id": "C",
+        "name": "ComponentC",
+        "component_type": "function",
+        "file_path": "/repo/src/c.py",
+        "relative_path": "src/c.py",
+        "source_code": "def c(): a()",
+        "depends_on": ["A"],
+        "start_line": 1,
+        "end_line": 2,
+        "parameters": []
+    },
+    "D": {
+        "id": "D",
+        "name": "ComponentD",
+        "component_type": "function",
+        "file_path": "/repo/src/d.py",
+        "relative_path": "src/d.py",
+        "source_code": "def d(): b()",
+        "depends_on": ["B"],
+        "start_line": 1,
+        "end_line": 2,
+        "parameters": []
+    }
+}

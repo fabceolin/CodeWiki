@@ -41,7 +41,8 @@ MANIFEST
 htmlcov/
 .tox/
 .hypothesis/
-tests/
+# Note: tests/ is NOT ignored - unit tests are tracked
+# tests/
 
 # Jupyter
 *.ipynb

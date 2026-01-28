@@ -1,0 +1,28 @@
+{
+    "backend": {
+        "components": ["backend.main", "backend.config"],
+        "children": {
+            "auth": {
+                "components": ["backend.auth.login", "backend.auth.logout", "backend.auth.validate"],
+                "children": {}
+            },
+            "db": {
+                "components": ["backend.db.users", "backend.db.connection"],
+                "children": {}
+            },
+            "api": {
+                "components": ["backend.api.routes"],
+                "children": {
+                    "handlers": {
+                        "components": ["backend.api.handlers.user"],
+                        "children": {}
+                    }
+                }
+            }
+        }
+    },
+    "utils": {
+        "components": ["utils.helpers"],
+        "children": {}
+    }
+}

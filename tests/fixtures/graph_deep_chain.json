@@ -1,0 +1,32 @@
+{
+  "level0.Root": {
+    "id": "level0.Root",
+    "source_code": "class Root: pass",
+    "depends_on": []
+  },
+  "level1.Child1": {
+    "id": "level1.Child1",
+    "source_code": "class Child1: pass",
+    "depends_on": ["level0.Root"]
+  },
+  "level2.Child2": {
+    "id": "level2.Child2",
+    "source_code": "class Child2: pass",
+    "depends_on": ["level1.Child1"]
+  },
+  "level3.Child3": {
+    "id": "level3.Child3",
+    "source_code": "class Child3: pass",
+    "depends_on": ["level2.Child2"]
+  },
+  "level4.Child4": {
+    "id": "level4.Child4",
+    "source_code": "class Child4: pass",
+    "depends_on": ["level3.Child3"]
+  },
+  "level5.Child5": {
+    "id": "level5.Child5",
+    "source_code": "class Child5: pass",
+    "depends_on": ["level4.Child4"]
+  }
+}

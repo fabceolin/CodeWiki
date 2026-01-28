@@ -1,0 +1,62 @@
+{
+    "level1.a": {
+        "id": "level1.a",
+        "name": "a",
+        "component_type": "function",
+        "file_path": "/repo/src/level1/a.py",
+        "relative_path": "src/level1/a.py",
+        "source_code": "def a(): pass",
+        "depends_on": [],
+        "start_line": 1,
+        "end_line": 2,
+        "parameters": []
+    },
+    "level2.b": {
+        "id": "level2.b",
+        "name": "b",
+        "component_type": "function",
+        "file_path": "/repo/src/level2/b.py",
+        "relative_path": "src/level2/b.py",
+        "source_code": "def b(): a()",
+        "depends_on": ["level1.a"],
+        "start_line": 1,
+        "end_line": 2,
+        "parameters": []
+    },
+    "level3.c": {
+        "id": "level3.c",
+        "name": "c",
+        "component_type": "function",
+        "file_path": "/repo/src/level3/c.py",
+        "relative_path": "src/level3/c.py",
+        "source_code": "def c(): b()",
+        "depends_on": ["level2.b"],
+        "start_line": 1,
+        "end_line": 2,
+        "parameters": []
+    },
+    "level4.d": {
+        "id": "level4.d",
+        "name": "d",
+        "component_type": "function",
+        "file_path": "/repo/src/level4/d.py",
+        "relative_path": "src/level4/d.py",
+        "source_code": "def d(): c()",
+        "depends_on": ["level3.c"],
+        "start_line": 1,
+        "end_line": 2,
+        "parameters": []
+    },
+    "level5.e": {
+        "id": "level5.e",
+        "name": "e",
+        "component_type": "function",
+        "file_path": "/repo/src/level5/e.py",
+        "relative_path": "src/level5/e.py",
+        "source_code": "def e(): d()",
+        "depends_on": ["level4.d"],
+        "start_line": 1,
+        "end_line": 2,
+        "parameters": []
+    }
+}

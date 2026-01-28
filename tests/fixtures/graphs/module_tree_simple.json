@@ -1,0 +1,10 @@
+{
+    "backend": {
+        "components": ["backend.main", "backend.config"],
+        "children": {}
+    },
+    "utils": {
+        "components": ["utils.helpers"],
+        "children": {}
+    }
+}
