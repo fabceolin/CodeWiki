@@ -1,0 +1,17 @@
+{
+  "component.A": {
+    "id": "component.A",
+    "source_code": "class A: pass",
+    "depends_on": ["component.C"]
+  },
+  "component.B": {
+    "id": "component.B",
+    "source_code": "class B: pass",
+    "depends_on": ["component.A"]
+  },
+  "component.C": {
+    "id": "component.C",
+    "source_code": "class C: pass",
+    "depends_on": ["component.B"]
+  }
+}

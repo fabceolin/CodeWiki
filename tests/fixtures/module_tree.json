@@ -1,0 +1,33 @@
+{
+  "module": {
+    "components": [
+      "module.ClassA.method1",
+      "module.ClassB.method2"
+    ]
+  },
+  "component": {
+    "components": [
+      "component.A",
+      "component.B",
+      "component.C"
+    ]
+  },
+  "level0": {
+    "components": ["level0.Root"]
+  },
+  "level1": {
+    "components": ["level1.Child1"]
+  },
+  "level2": {
+    "components": ["level2.Child2"]
+  },
+  "level3": {
+    "components": ["level3.Child3"]
+  },
+  "level4": {
+    "components": ["level4.Child4"]
+  },
+  "level5": {
+    "components": ["level5.Child5"]
+  }
+}

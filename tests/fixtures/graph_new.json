@@ -1,0 +1,12 @@
+{
+  "module.ClassA.method1": {
+    "id": "module.ClassA.method1",
+    "source_code": "def method1(): return 42",
+    "depends_on": []
+  },
+  "module.ClassB.method2": {
+    "id": "module.ClassB.method2",
+    "source_code": "def method2(): return method1()",
+    "depends_on": ["module.ClassA.method1"]
+  }
+}
