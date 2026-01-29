@@ -293,8 +293,8 @@ class CLIDocumentationGenerator:
         # Stage 2: Module Clustering
         # Import clustering functions
         from codewiki.src.be.cluster_modules import cluster_modules
-        from codewiki.src.utils import file_manager
         from codewiki.src.config import FIRST_MODULE_TREE_FILENAME, MODULE_TREE_FILENAME
+        # Note: file_manager is imported at module level
 
         working_dir = str(self.output_dir.absolute())
         file_manager.ensure_directory(working_dir)
