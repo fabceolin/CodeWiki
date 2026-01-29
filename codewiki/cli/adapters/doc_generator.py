@@ -21,6 +21,7 @@ from codewiki.cli.utils.errors import APIError
 # Import backend modules
 from codewiki.src.be.documentation_generator import DocumentationGenerator
 from codewiki.src.config import Config as BackendConfig, set_cli_context
+from codewiki.src.utils import file_manager
 
 
 class CLIDocumentationGenerator:
