@@ -12,13 +12,59 @@ All Docker-related files are located in the `docker/` directory:
 
 ```
 docker/
-├── Dockerfile           # Container image definition
+├── Dockerfile           # Web application image
+├── Dockerfile.runner    # CI/CD runner image (lightweight CLI)
 ├── docker-compose.yml   # Service orchestration
 ├── env.example          # Environment variables template
 └── DOCKER_README.md     # This file
 ```
 
 The Dockerfile builds from the project root context to include all necessary application code.
+
+---
+
+## CI/CD Runner Image
+
+For CI/CD pipelines (Bitbucket, GitHub Actions, GitLab CI), use the lightweight runner image:
+
+### Pre-built Image (Recommended)
+
+```yaml
+# Bitbucket Pipelines
+image: ghcr.io/fabceolin/codewiki-runner:latest
+
+# GitHub Actions
+container:
+  image: ghcr.io/fabceolin/codewiki-runner:latest
+```
+
+### Available Tags
+
+| Tag | Description |
+|-----|-------------|
+| `latest` | Latest from development branch |
+| `dev` | Alias for latest |
+| `stable` | Latest from main branch |
+| `v1.0.0` | Specific version (from releases) |
+| `sha-abc1234` | Specific commit |
+
+### Build Locally
+
+```bash
+# From project root
+docker build -f docker/Dockerfile.runner -t codewiki-runner:latest .
+
+# Run analysis
+docker run --rm -v $(pwd):/workspace codewiki-runner:latest analyze --repo /workspace
+```
+
+### Features
+
+- Python 3.12 slim base
+- Node.js 18 (for mermaid diagram validation)
+- Git for repository operations
+- CodeWiki CLI installed as entrypoint
+- Multi-platform: linux/amd64, linux/arm64
 
 ---
 

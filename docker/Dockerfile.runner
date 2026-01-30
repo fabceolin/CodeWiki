@@ -1,0 +1,61 @@
+# =============================================================================
+# CodeWiki Runner - CI/CD Image
+# =============================================================================
+# Lightweight image for running CodeWiki CLI in CI/CD pipelines.
+#
+# Build:
+#   docker build -f docker/Dockerfile.runner -t codewiki-runner:latest .
+#
+# Usage:
+#   docker run --rm -v $(pwd):/workspace codewiki-runner:latest codewiki analyze --repo /workspace
+#
+# Published at:
+#   ghcr.io/fabceolin/codewiki-runner:latest
+# =============================================================================
+
+FROM python:3.12-slim
+
+LABEL org.opencontainers.image.source="https://github.com/fabceolin/CodeWiki"
+LABEL org.opencontainers.image.description="CodeWiki CLI runner for CI/CD pipelines"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL maintainer="CodeWiki Contributors"
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    gnupg \
+    ca-certificates \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 18 (required for mermaid-py diagram validation)
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && node --version && npm --version
+
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip wheel setuptools
+
+# Copy and install CodeWiki
+WORKDIR /opt/codewiki
+COPY pyproject.toml README.md requirements.txt ./
+COPY codewiki ./codewiki
+
+# Install as package to get CLI entrypoint
+RUN pip install --no-cache-dir -e .
+
+# Verify installation
+RUN codewiki --version
+
+# Set working directory for mounted repos
+WORKDIR /workspace
+
+# Default entrypoint
+ENTRYPOINT ["codewiki"]
+CMD ["--help"]
