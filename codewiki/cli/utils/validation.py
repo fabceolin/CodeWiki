@@ -183,20 +183,26 @@ def detect_supported_languages(directory: Path) -> List[Tuple[str, int]]:
         '.idea', '.vscode', '.gradle', '.mvn'
     }
     
-    def should_exclude_file(file_path: Path) -> bool:
-        """Check if file is in an excluded directory."""
-        parts = file_path.parts
+    def should_exclude_file(file_path: Path, base_dir: Path) -> bool:
+        """Check if file is in an excluded directory (relative to base_dir)."""
+        try:
+            # Only check relative path parts, not the full absolute path
+            relative_path = file_path.relative_to(base_dir)
+            parts = relative_path.parts
+        except ValueError:
+            # If file is not relative to base_dir, use full path
+            parts = file_path.parts
         return any(excluded_dir in parts for excluded_dir in excluded_dirs)
-    
+
     language_counts = {}
-    
+
     for language, extensions in language_extensions.items():
         count = 0
         for ext in extensions:
             # Filter out files in excluded directories
             count += sum(
                 1 for f in directory.rglob(f"*{ext}")
-                if f.is_file() and not should_exclude_file(f)
+                if f.is_file() and not should_exclude_file(f, directory)
             )
         
         if count > 0:
