@@ -86,6 +86,14 @@ def validate_dependency_graph_schema(data: dict) -> bool:
     help="Maximum depth for hierarchical decomposition (overrides config)",
 )
 @click.option(
+    "--seed",
+    "-s",
+    "seed_path",
+    type=click.Path(exists=True),
+    default=None,
+    help="Path to existing module tree JSON to use as seed (preserves existing modules)",
+)
+@click.option(
     "--verbose",
     "-v",
     is_flag=True,
@@ -100,6 +108,7 @@ def cluster_command(
     use_gemini_code: bool,
     max_token_per_module: Optional[int],
     max_depth: Optional[int],
+    seed_path: Optional[str],
     verbose: bool,
 ):
     """
@@ -139,6 +148,10 @@ def cluster_command(
     \b
     # Verbose output for debugging
     $ codewiki cluster --input ./docs --verbose
+
+    \b
+    # Use existing module tree as seed (preserves existing modules, finds new ones)
+    $ codewiki cluster --input ./docs --seed ./docs/first_module_tree.json --use-claude-code
     """
     logger = create_logger(verbose=verbose)
 
@@ -305,6 +318,23 @@ def cluster_command(
 
         leaf_nodes = input_data["leaf_nodes"]
 
+        # Load seed module tree if provided
+        seed_modules = None
+        if seed_path:
+            seed_path_obj = Path(seed_path).expanduser().resolve()
+            try:
+                with open(seed_path_obj, 'r', encoding='utf-8') as f:
+                    seed_modules = json.load(f)
+                if not isinstance(seed_modules, dict):
+                    raise ValueError("Seed module tree must be a JSON object")
+                logger.success(f"Loaded seed module tree: {len(seed_modules)} modules from {seed_path_obj}")
+                if verbose:
+                    logger.debug(f"Seed modules: {', '.join(seed_modules.keys())}")
+            except json.JSONDecodeError as e:
+                raise FileSystemError(f"Invalid JSON in seed file: {seed_path_obj}\n\nError: {e}")
+            except Exception as e:
+                raise FileSystemError(f"Failed to load seed module tree: {e}")
+
         # Create backend config
         backend_config = Config(
             repo_path=input_data.get("metadata", {}).get("repo_path", str(output_dir)),
@@ -333,13 +363,13 @@ def cluster_command(
         try:
             if use_claude_code:
                 from codewiki.src.be.claude_code_adapter import claude_code_cluster
-                module_tree = claude_code_cluster(leaf_nodes, components, backend_config)
+                module_tree = claude_code_cluster(leaf_nodes, components, backend_config, seed_modules=seed_modules)
             elif use_gemini_code:
                 from codewiki.src.be.gemini_code_adapter import gemini_code_cluster
-                module_tree = gemini_code_cluster(leaf_nodes, components, backend_config)
+                module_tree = gemini_code_cluster(leaf_nodes, components, backend_config, seed_modules=seed_modules)
             else:
                 from codewiki.src.be.cluster_modules import cluster_modules
-                module_tree = cluster_modules(leaf_nodes, components, backend_config)
+                module_tree = cluster_modules(leaf_nodes, components, backend_config, seed_modules=seed_modules)
 
             if not module_tree:
                 # If clustering returns empty, create a default single-module tree

@@ -47,11 +47,63 @@ def cluster_modules(
     config: Config,
     current_module_tree: dict[str, Any] = {},
     current_module_name: str = None,
-    current_module_path: List[str] = []
+    current_module_path: List[str] = [],
+    seed_modules: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
     Cluster the potential core components into modules.
+
+    Args:
+        leaf_nodes: List of component IDs to cluster
+        components: Dictionary mapping component IDs to Node objects
+        config: Configuration object
+        current_module_tree: Current module tree for hierarchical clustering
+        current_module_name: Name of current module being subdivided
+        current_module_path: Path to current module in tree
+        seed_modules: Existing module tree to preserve and extend (optional)
     """
+    # If seed modules provided at top level, start with them and cluster remaining
+    if seed_modules is not None and current_module_tree == {}:
+        logger.info(f"Starting seeded clustering with {len(seed_modules)} existing modules")
+        # Get components already assigned to seed modules
+        assigned_components = set()
+        for module_info in seed_modules.values():
+            assigned_components.update(module_info.get("components", []))
+
+        # Find unassigned leaf nodes
+        unassigned_leaf_nodes = [ln for ln in leaf_nodes if ln not in assigned_components]
+        logger.info(f"Found {len(unassigned_leaf_nodes)} unassigned components out of {len(leaf_nodes)} total")
+
+        # Start with seed modules as base
+        result = {}
+        for module_name, module_info in seed_modules.items():
+            result[module_name] = {
+                "path": module_info.get("path", ""),
+                "components": module_info.get("components", []),
+                "children": module_info.get("children", {})
+            }
+
+        # Cluster unassigned components if any
+        if unassigned_leaf_nodes:
+            new_modules = cluster_modules(
+                unassigned_leaf_nodes,
+                components,
+                config,
+                current_module_tree={},
+                current_module_name=None,
+                current_module_path=[],
+                seed_modules=None  # Don't pass seed again to avoid recursion
+            )
+            # Merge new modules into result
+            for module_name, module_info in new_modules.items():
+                if module_name not in result:
+                    result[module_name] = module_info
+                else:
+                    # Append to existing module if name collision
+                    result[module_name]["components"].extend(module_info.get("components", []))
+
+        return result
+
     potential_core_components, potential_core_components_with_code = format_potential_core_components(leaf_nodes, components)
 
     if count_tokens(potential_core_components_with_code) <= config.max_token_per_module:

@@ -37,6 +37,7 @@ from typing import Any, Dict, List, Optional
 from codewiki.src.be.dependency_analyzer.models.core import Node
 from codewiki.src.be.prompt_template import (
     CLUSTER_REPO_PROMPT,
+    CLUSTER_REPO_WITH_SEED_PROMPT,
     CLUSTER_MODULE_PROMPT,
     format_user_prompt,
     format_system_prompt,
@@ -182,12 +183,38 @@ def _invoke_claude_code(
         raise ClaudeCodeError(f"Failed to invoke Claude Code CLI: {str(e)}")
 
 
+def _format_seed_modules_for_prompt(seed_modules: Dict[str, Any]) -> str:
+    """Format seed modules as a readable string for the prompt."""
+    lines = []
+    for module_name, module_info in seed_modules.items():
+        components_list = module_info.get("components", [])
+        path = module_info.get("path", "")
+        lines.append(f"Module: {module_name}")
+        lines.append(f"  Path: {path}")
+        lines.append(f"  Components ({len(components_list)}):")
+        for comp in components_list[:10]:  # Show first 10 components
+            lines.append(f"    - {comp}")
+        if len(components_list) > 10:
+            lines.append(f"    ... and {len(components_list) - 10} more")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _get_seed_component_ids(seed_modules: Dict[str, Any]) -> set:
+    """Get all component IDs that are already assigned to seed modules."""
+    assigned = set()
+    for module_info in seed_modules.values():
+        assigned.update(module_info.get("components", []))
+    return assigned
+
+
 def claude_code_cluster(
     leaf_nodes: List[str],
     components: Dict[str, Node],
     config: Any,
     current_module_tree: Dict[str, Any] = None,
     current_module_name: Optional[str] = None,
+    seed_modules: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Cluster code components into modules using Claude Code CLI.
@@ -198,6 +225,7 @@ def claude_code_cluster(
         config: Configuration object with claude_code_path and timeout settings
         current_module_tree: Current module tree for context (optional)
         current_module_name: Name of current module being subdivided (optional)
+        seed_modules: Existing module tree to preserve and extend (optional)
 
     Returns:
         Dictionary representing the module tree with grouped components
@@ -212,7 +240,15 @@ def claude_code_cluster(
     potential_core_components, _ = format_potential_core_components(leaf_nodes, components)
 
     # Build the clustering prompt
-    if current_module_tree == {}:
+    if seed_modules:
+        # Use seed-aware prompt that preserves existing modules
+        formatted_seed = _format_seed_modules_for_prompt(seed_modules)
+        prompt = CLUSTER_REPO_WITH_SEED_PROMPT.format(
+            seed_modules=formatted_seed,
+            potential_core_components=potential_core_components
+        )
+        logger.info(f"Using seeded clustering with {len(seed_modules)} existing modules")
+    elif current_module_tree == {}:
         prompt = CLUSTER_REPO_PROMPT.format(potential_core_components=potential_core_components)
     else:
         # Format the module tree for context

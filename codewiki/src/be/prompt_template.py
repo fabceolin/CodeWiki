@@ -159,6 +159,45 @@ Firstly reason about the components and then group them and return the result in
 </GROUPED_COMPONENTS>
 """.strip()
 
+CLUSTER_REPO_WITH_SEED_PROMPT = """
+You are analyzing a codebase that already has some modules defined. Your task is to:
+1. PRESERVE all existing seed modules exactly as defined
+2. Find NEW modules for components that are not yet assigned to any seed module
+3. You may suggest splitting large seed modules if they exceed reasonable size
+
+Here are the EXISTING SEED MODULES that must be preserved:
+<SEED_MODULES>
+{seed_modules}
+</SEED_MODULES>
+
+Here is the list of ALL components in the repository:
+<POTENTIAL_CORE_COMPONENTS>
+{potential_core_components}
+</POTENTIAL_CORE_COMPONENTS>
+
+Instructions:
+- Include ALL seed modules in your output with their original components
+- For components NOT in any seed module, create new appropriate modules
+- Use descriptive module names that reflect the functionality
+- DO NOT remove or rename existing seed modules
+- You MAY add new components to existing seed modules if they clearly belong there
+
+Return the result in the following format:
+<GROUPED_COMPONENTS>
+{{
+    "module_name_1": {{
+        "path": <path_to_the_module_1>,
+        "components": [
+            <component_name_1>,
+            <component_name_2>,
+            ...
+        ]
+    }},
+    ...
+}}
+</GROUPED_COMPONENTS>
+""".strip()
+
 CLUSTER_MODULE_PROMPT = """
 Here is the module tree of a repository:
 
