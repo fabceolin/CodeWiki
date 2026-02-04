@@ -129,109 +129,132 @@ overview_content
 """.strip()
 
 CLUSTER_REPO_PROMPT = """
-Here is list of all potential core components of the repository (It's normal that some components are not essential to the repository):
+You are a code architecture analyst. Your task is to group code components into logical modules.
+
+Here is list of all potential core components of the repository:
 <POTENTIAL_CORE_COMPONENTS>
 {potential_core_components}
 </POTENTIAL_CORE_COMPONENTS>
 
-Please group the components into groups such that each group is a set of components that are closely related to each other and together they form a module. DO NOT include components that are not essential to the repository.
-Firstly reason about the components and then group them and return the result in the following format:
+TASK: Group related components into modules based on their functionality, domain, and relationships.
+
+GUIDELINES:
+1. Group components that work together to implement a specific feature or domain
+2. Use descriptive module names (e.g., "user_authentication", "order_processing", "api_routes")
+3. Each module should have a clear, single responsibility
+4. Exclude components that are utility/helper code not essential to any specific module
+5. The "path" should be the common directory path for the module's components
+
+CRITICAL OUTPUT REQUIREMENTS:
+- You MUST wrap your final answer in <GROUPED_COMPONENTS> and </GROUPED_COMPONENTS> tags
+- Inside the tags, provide ONLY valid Python dictionary syntax (no comments, no extra text)
+- Use double quotes for all strings
+- Do NOT include any explanation or reasoning inside the tags
+
+First, briefly analyze the components (2-3 sentences max), then output the grouped result.
+
+OUTPUT FORMAT (you MUST follow this exactly):
 <GROUPED_COMPONENTS>
 {{
     "module_name_1": {{
-        "path": <path_to_the_module_1>, # the path to the module can be file or directory
-        "components": [
-            <component_name_1>,
-            <component_name_2>,
-            ...
-        ]
+        "path": "path/to/module1",
+        "components": ["component_a", "component_b"]
     }},
     "module_name_2": {{
-        "path": <path_to_the_module_2>,
-        "components": [
-            <component_name_1>,
-            <component_name_2>,
-            ...
-        ]
-    }},
-    ...
+        "path": "path/to/module2",
+        "components": ["component_c", "component_d"]
+    }}
 }}
 </GROUPED_COMPONENTS>
 """.strip()
 
 CLUSTER_REPO_WITH_SEED_PROMPT = """
-You are analyzing a codebase that already has some modules defined. Your task is to:
-1. PRESERVE all existing seed modules exactly as defined
-2. Find NEW modules for components that are not yet assigned to any seed module
-3. You may suggest splitting large seed modules if they exceed reasonable size
+You are a code architecture analyst. Your task is to extend an existing module structure with new modules.
 
-Here are the EXISTING SEED MODULES that must be preserved:
+EXISTING SEED MODULES (you MUST preserve these):
 <SEED_MODULES>
 {seed_modules}
 </SEED_MODULES>
 
-Here is the list of ALL components in the repository:
+ALL COMPONENTS in the repository:
 <POTENTIAL_CORE_COMPONENTS>
 {potential_core_components}
 </POTENTIAL_CORE_COMPONENTS>
 
-Instructions:
-- Include ALL seed modules in your output with their original components
-- For components NOT in any seed module, create new appropriate modules
-- Use descriptive module names that reflect the functionality
-- DO NOT remove or rename existing seed modules
-- You MAY add new components to existing seed modules if they clearly belong there
+TASK: Create a complete module tree that:
+1. PRESERVES all seed modules exactly as defined (do not rename or remove them)
+2. Creates NEW modules for unassigned components
+3. Optionally adds new components to existing seed modules if they clearly belong
 
-Return the result in the following format:
+GUIDELINES:
+- Use descriptive module names reflecting functionality
+- Group related components by domain/feature
+- The "path" should be the common directory path for the module's components
+
+CRITICAL OUTPUT REQUIREMENTS:
+- You MUST wrap your final answer in <GROUPED_COMPONENTS> and </GROUPED_COMPONENTS> tags
+- Inside the tags, provide ONLY valid Python dictionary syntax (no comments, no extra text)
+- Use double quotes for all strings
+- Do NOT include any explanation or reasoning inside the tags
+
+First, briefly note which seed modules exist and what new modules you'll create (2-3 sentences max).
+
+OUTPUT FORMAT (you MUST follow this exactly):
 <GROUPED_COMPONENTS>
 {{
-    "module_name_1": {{
-        "path": <path_to_the_module_1>,
-        "components": [
-            <component_name_1>,
-            <component_name_2>,
-            ...
-        ]
+    "existing_seed_module": {{
+        "path": "path/to/module",
+        "components": ["comp1", "comp2"]
     }},
-    ...
+    "new_module_name": {{
+        "path": "path/to/new",
+        "components": ["comp3", "comp4"]
+    }}
 }}
 </GROUPED_COMPONENTS>
 """.strip()
 
 CLUSTER_MODULE_PROMPT = """
-Here is the module tree of a repository:
+You are a code architecture analyst. Your task is to subdivide a module into smaller sub-modules.
 
+CURRENT MODULE TREE:
 <MODULE_TREE>
 {module_tree}
 </MODULE_TREE>
 
-Here is list of all potential core components of the module {module_name} (It's normal that some components are not essential to the module):
+COMPONENTS in module "{module_name}" to be subdivided:
 <POTENTIAL_CORE_COMPONENTS>
 {potential_core_components}
 </POTENTIAL_CORE_COMPONENTS>
 
-Please group the components into groups such that each group is a set of components that are closely related to each other and together they form a smaller module. DO NOT include components that are not essential to the module.
+TASK: Group the components of "{module_name}" into smaller, more focused sub-modules.
 
-Firstly reason based on given context and then group them and return the result in the following format:
+GUIDELINES:
+1. Create sub-modules that each have a clear, single responsibility
+2. Use descriptive names prefixed with the parent module context
+3. Group components that work together on a specific feature
+4. Exclude utility components that don't fit a specific sub-module
+5. The "path" should be the common directory path for each sub-module's components
+
+CRITICAL OUTPUT REQUIREMENTS:
+- You MUST wrap your final answer in <GROUPED_COMPONENTS> and </GROUPED_COMPONENTS> tags
+- Inside the tags, provide ONLY valid Python dictionary syntax (no comments, no extra text)
+- Use double quotes for all strings
+- Do NOT include any explanation or reasoning inside the tags
+
+First, briefly describe how you'll subdivide the module (2-3 sentences max).
+
+OUTPUT FORMAT (you MUST follow this exactly):
 <GROUPED_COMPONENTS>
 {{
-    "module_name_1": {{
-        "path": <path_to_the_module_1>, # the path to the module can be file or directory
-        "components": [
-            <component_name_1>,
-            <component_name_2>,
-            ...
-        ]
+    "submodule_name_1": {{
+        "path": "path/to/submodule1",
+        "components": ["component_a", "component_b"]
     }},
-    "module_name_2": {{
-        "path": <path_to_the_module_2>,
-        "components": [
-            <component_name_1>,
-            <component_name_2>,
-            ...
-        ]
-    }},
-    ...
+    "submodule_name_2": {{
+        "path": "path/to/submodule2",
+        "components": ["component_c", "component_d"]
+    }}
 }}
 </GROUPED_COMPONENTS>
 """.strip()

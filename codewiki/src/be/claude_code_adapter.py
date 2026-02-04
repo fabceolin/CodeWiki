@@ -285,12 +285,56 @@ def claude_code_cluster(
 
     # Parse the response - expect JSON wrapped in <GROUPED_COMPONENTS> tags
     try:
-        if "<GROUPED_COMPONENTS>" not in response or "</GROUPED_COMPONENTS>" not in response:
-            logger.error(f"Invalid Claude Code response format - missing component tags: {response[:200]}...")
-            return {}
+        # Try to find the tags (case-insensitive and flexible whitespace)
+        import re
 
-        response_content = response.split("<GROUPED_COMPONENTS>")[1].split("</GROUPED_COMPONENTS>")[0]
-        module_tree = eval(response_content.strip())
+        # Look for the tags with flexible matching
+        start_pattern = re.compile(r'<GROUPED_COMPONENTS>\s*', re.IGNORECASE)
+        end_pattern = re.compile(r'\s*</GROUPED_COMPONENTS>', re.IGNORECASE)
+
+        start_match = start_pattern.search(response)
+        end_match = end_pattern.search(response)
+
+        if not start_match or not end_match:
+            # Try to find JSON-like content as fallback
+            logger.warning(f"Missing GROUPED_COMPONENTS tags, attempting JSON extraction...")
+
+            # Look for a dictionary pattern in the response
+            json_pattern = re.compile(r'\{[^{}]*"[^"]+"\s*:\s*\{[^{}]*"path"[^}]*\}[^{}]*\}', re.DOTALL)
+            json_match = json_pattern.search(response)
+
+            if json_match:
+                response_content = json_match.group(0)
+                logger.info(f"Found JSON-like content: {response_content[:100]}...")
+            else:
+                logger.error(f"Invalid Claude Code response format - missing component tags: {response[:500]}...")
+                return {}
+        else:
+            response_content = response[start_match.end():end_match.start()]
+
+        # Clean up the content - remove any markdown code blocks
+        response_content = response_content.strip()
+        if response_content.startswith("```"):
+            # Remove markdown code block markers
+            lines = response_content.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            response_content = "\n".join(lines)
+
+        # Try to parse as Python dict (safer than eval)
+        try:
+            import ast
+            module_tree = ast.literal_eval(response_content.strip())
+        except (SyntaxError, ValueError) as parse_err:
+            # Try JSON parsing as fallback
+            try:
+                module_tree = json.loads(response_content.strip())
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse response as Python dict or JSON: {parse_err}")
+                logger.error(f"Content: {response_content[:500]}...")
+                return {}
 
         if not isinstance(module_tree, dict):
             logger.error(f"Invalid module tree format - expected dict, got {type(module_tree)}")
@@ -298,9 +342,10 @@ def claude_code_cluster(
 
         # Normalize module tree: ensure each module has 'children' key for compatibility
         for module_name, module_info in module_tree.items():
-            if "children" not in module_info:
+            if isinstance(module_info, dict) and "children" not in module_info:
                 module_info["children"] = {}
 
+        logger.info(f"Successfully parsed {len(module_tree)} modules from Claude Code response")
         return module_tree
 
     except Exception as e:
