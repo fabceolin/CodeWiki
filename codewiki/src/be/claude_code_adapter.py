@@ -245,6 +245,10 @@ def _invoke_claude_code(
             env=env,  # Pass environment variables including CLAUDE_CODE_OAUTH_TOKEN
         )
 
+        # Log stderr if present (useful for debugging even on success)
+        if result.stderr:
+            logger.warning(f"Claude Code CLI stderr: {result.stderr[:500]}")
+
         if result.returncode != 0:
             raise ClaudeCodeError(
                 f"Claude Code CLI returned non-zero exit code: {result.returncode}",
@@ -252,7 +256,31 @@ def _invoke_claude_code(
                 stderr=result.stderr,
             )
 
-        return result.stdout
+        # Check for authentication errors in stdout (Claude CLI returns these with exit code 0)
+        output = result.stdout or ""
+        if "Invalid API key" in output or "Please run /login" in output:
+            error_msg = (
+                f"Claude Code CLI authentication failed. "
+                f"Check CLAUDE_CODE_OAUTH_TOKEN environment variable. "
+                f"Output: {output[:200]}"
+            )
+            logger.error(error_msg)
+            raise ClaudeCodeError(error_msg, returncode=0, stderr=result.stderr)
+
+        # Check for empty response - this indicates a problem
+        if not output or len(output.strip()) == 0:
+            error_msg = (
+                f"Claude Code CLI returned empty response. "
+                f"This may indicate an authentication issue or CLI error. "
+                f"stderr: {result.stderr or 'empty'}"
+            )
+            logger.error(error_msg)
+            # Dump debug info for empty response
+            if DEBUG_MODE:
+                _dump_debug_info(prompt, "", f"Empty response from CLI.\nstderr: {result.stderr or 'empty'}")
+            raise ClaudeCodeError(error_msg, returncode=0, stderr=result.stderr)
+
+        return output
 
     except subprocess.TimeoutExpired:
         raise ClaudeCodeError(f"Claude Code CLI timed out after {timeout} seconds")
