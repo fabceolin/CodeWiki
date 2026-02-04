@@ -19,6 +19,10 @@ on:
         description: 'Image tag (default: latest)'
         required: false
         default: 'latest'
+      no_cache:
+        description: 'Build without cache (true/false)'
+        required: false
+        default: 'false'
 
 env:
   REGISTRY: ghcr.io
@@ -34,6 +38,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          VERSION=$(grep -E '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "CodeWiki version: $VERSION"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -64,6 +75,15 @@ jobs:
             # Git SHA for traceability
             type=sha,prefix=sha-
 
+      # Cache scope includes version hash to bust cache when version changes
+      - name: Generate cache key
+        id: cache-key
+        run: |
+          # Include version and key dependency files in cache scope
+          CACHE_SCOPE="codewiki-${{ steps.version.outputs.version }}-${{ hashFiles('pyproject.toml', 'requirements.txt') }}"
+          echo "scope=$CACHE_SCOPE" >> $GITHUB_OUTPUT
+          echo "Cache scope: $CACHE_SCOPE"
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -72,13 +92,35 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Use scoped cache that includes version - busts cache when version changes
+          cache-from: type=gha,scope=${{ steps.cache-key.outputs.scope }}
+          cache-to: type=gha,mode=max,scope=${{ steps.cache-key.outputs.scope }}
           platforms: linux/amd64,linux/arm64
+          # Pass version as build arg for cache busting if needed
+          build-args: |
+            CODEWIKI_VERSION=${{ steps.version.outputs.version }}
+          no-cache: ${{ github.event.inputs.no_cache == 'true' }}
+
+      - name: Verify built image version
+        run: |
+          echo "=== Verifying CodeWiki version in built image ==="
+          # Pull the just-built image (amd64 only for verification)
+          docker pull --platform linux/amd64 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${GITHUB_SHA::7}
+          # Check version
+          BUILT_VERSION=$(docker run --rm --entrypoint "" ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${GITHUB_SHA::7} sh -c "codewiki --version" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          echo "Built image version: $BUILT_VERSION"
+          echo "Expected version: ${{ steps.version.outputs.version }}"
+          if [ "$BUILT_VERSION" != "${{ steps.version.outputs.version }}" ]; then
+            echo "::error::Version mismatch! Built: $BUILT_VERSION, Expected: ${{ steps.version.outputs.version }}"
+            exit 1
+          fi
+          echo "Version verified successfully!"
 
       - name: Generate image summary
         run: |
           echo "## Docker Image Published :whale:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**CodeWiki Version:** \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Registry:** \`${{ env.REGISTRY }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
