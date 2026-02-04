@@ -30,8 +30,11 @@ if the prompt exceeds the configurable `max_prompt_tokens` limit (default: 180K 
 
 import json
 import logging
+import os
 import shutil
 import subprocess
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from codewiki.src.be.dependency_analyzer.models.core import Node
@@ -62,6 +65,78 @@ DEFAULT_CLAUDE_CODE_TIMEOUT = 900
 # Claude Code CLI limit is ~790K chars (~198K tokens)
 # Setting to 180K to leave room for response and system prompt
 DEFAULT_MAX_PROMPT_TOKENS = 180_000
+
+# Debug mode - set CODEWIKI_DEBUG=1 to enable debug output
+DEBUG_MODE = os.environ.get("CODEWIKI_DEBUG", "").lower() in ("1", "true", "yes")
+
+# Debug output directory - defaults to current working directory
+DEBUG_OUTPUT_DIR = os.environ.get("CODEWIKI_DEBUG_DIR", ".")
+
+
+def _dump_debug_info(
+    prompt: str,
+    response: str,
+    error_context: str = "",
+    output_dir: str = None
+) -> str:
+    """
+    Dump prompt and response to files for debugging.
+
+    Args:
+        prompt: The prompt that was sent to Claude
+        response: The response received from Claude
+        error_context: Additional context about the error
+        output_dir: Directory to write debug files (defaults to DEBUG_OUTPUT_DIR)
+
+    Returns:
+        Path to the debug output directory
+    """
+    if output_dir is None:
+        output_dir = DEBUG_OUTPUT_DIR
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    debug_dir = Path(output_dir) / f"codewiki_debug_{timestamp}"
+    debug_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write prompt
+    prompt_file = debug_dir / "prompt.txt"
+    with open(prompt_file, "w", encoding="utf-8") as f:
+        f.write(prompt)
+
+    # Write response
+    response_file = debug_dir / "response.txt"
+    with open(response_file, "w", encoding="utf-8") as f:
+        f.write(response)
+
+    # Write error context if provided
+    if error_context:
+        error_file = debug_dir / "error.txt"
+        with open(error_file, "w", encoding="utf-8") as f:
+            f.write(error_context)
+
+    # Write summary
+    summary_file = debug_dir / "summary.txt"
+    with open(summary_file, "w", encoding="utf-8") as f:
+        f.write(f"CodeWiki Debug Output\n")
+        f.write(f"=" * 60 + "\n")
+        f.write(f"Timestamp: {timestamp}\n")
+        f.write(f"Prompt length: {len(prompt)} chars (~{len(prompt)//4} tokens)\n")
+        f.write(f"Response length: {len(response)} chars\n")
+        f.write(f"\n")
+        f.write(f"Files:\n")
+        f.write(f"  - prompt.txt: Full prompt sent to Claude\n")
+        f.write(f"  - response.txt: Full response from Claude\n")
+        if error_context:
+            f.write(f"  - error.txt: Error context\n")
+        f.write(f"\n")
+        f.write(f"Response preview (first 2000 chars):\n")
+        f.write(f"-" * 60 + "\n")
+        f.write(response[:2000])
+        if len(response) > 2000:
+            f.write(f"\n... (truncated, {len(response) - 2000} more chars)")
+
+    logger.info(f"Debug info dumped to: {debug_dir}")
+    return str(debug_dir)
 
 
 class ClaudeCodeError(Exception):
@@ -302,6 +377,11 @@ def claude_code_cluster(
     logger.info("Invoking Claude Code CLI for module clustering...")
     response = _invoke_claude_code(prompt, timeout=timeout, claude_code_path=claude_path)
 
+    # Debug mode: always dump prompt and response
+    if DEBUG_MODE:
+        debug_dir = _dump_debug_info(prompt, response, "Debug mode enabled - dumping all requests")
+        logger.info(f"DEBUG: Prompt and response saved to {debug_dir}")
+
     # Parse the response - expect JSON wrapped in <GROUPED_COMPONENTS> tags
     try:
         # Try to find the tags (case-insensitive and flexible whitespace)
@@ -317,6 +397,16 @@ def claude_code_cluster(
         if not start_match or not end_match:
             # Try to find JSON-like content as fallback
             logger.warning(f"Missing GROUPED_COMPONENTS tags, attempting JSON extraction...")
+
+            # Dump debug info on parsing failure
+            debug_dir = _dump_debug_info(
+                prompt, response,
+                f"Missing GROUPED_COMPONENTS tags.\n"
+                f"start_match: {start_match}\n"
+                f"end_match: {end_match}\n"
+                f"Response length: {len(response)} chars"
+            )
+            logger.warning(f"Debug info saved to: {debug_dir}")
 
             # Look for a dictionary pattern in the response
             json_pattern = re.compile(r'\{[^{}]*"[^"]+"\s*:\s*\{[^{}]*"path"[^}]*\}[^{}]*\}', re.DOTALL)
@@ -350,13 +440,30 @@ def claude_code_cluster(
             # Try JSON parsing as fallback
             try:
                 module_tree = json.loads(response_content.strip())
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as json_err:
+                # Dump debug info on JSON parsing failure
+                debug_dir = _dump_debug_info(
+                    prompt, response,
+                    f"JSON parsing failed.\n"
+                    f"AST error: {parse_err}\n"
+                    f"JSON error: {json_err}\n"
+                    f"Content preview: {response_content[:500]}..."
+                )
                 logger.error(f"Failed to parse response as Python dict or JSON: {parse_err}")
-                logger.error(f"Content: {response_content[:500]}...")
+                logger.error(f"Debug info saved to: {debug_dir}")
                 return {}
 
         if not isinstance(module_tree, dict):
+            # Dump debug info on type error
+            debug_dir = _dump_debug_info(
+                prompt, response,
+                f"Invalid module tree type.\n"
+                f"Expected: dict\n"
+                f"Got: {type(module_tree)}\n"
+                f"Value: {module_tree}"
+            )
             logger.error(f"Invalid module tree format - expected dict, got {type(module_tree)}")
+            logger.error(f"Debug info saved to: {debug_dir}")
             return {}
 
         # Normalize module tree: ensure each module has 'children' key for compatibility
