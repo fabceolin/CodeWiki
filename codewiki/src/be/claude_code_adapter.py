@@ -43,6 +43,12 @@ from codewiki.src.be.prompt_template import (
     format_system_prompt,
     format_leaf_system_prompt,
 )
+from codewiki.src.be.prompt_template_v2 import (
+    CLUSTER_REPO_PROMPT_V2,
+    CLUSTER_REPO_WITH_SEED_PROMPT_V2,
+    CLUSTER_MODULE_PROMPT_V2,
+    format_cluster_prompt_v2,
+)
 from codewiki.src.be.cluster_modules import format_potential_core_components
 from codewiki.src.be.utils import is_complex_module
 
@@ -215,6 +221,7 @@ def claude_code_cluster(
     current_module_tree: Dict[str, Any] = None,
     current_module_name: Optional[str] = None,
     seed_modules: Optional[Dict[str, Any]] = None,
+    use_v2_prompts: bool = True,
 ) -> Dict[str, Any]:
     """
     Cluster code components into modules using Claude Code CLI.
@@ -239,41 +246,53 @@ def claude_code_cluster(
     # Format the potential core components for the prompt
     potential_core_components, _ = format_potential_core_components(leaf_nodes, components)
 
-    # Build the clustering prompt
-    if seed_modules:
-        # Use seed-aware prompt that preserves existing modules
-        formatted_seed = _format_seed_modules_for_prompt(seed_modules)
-        prompt = CLUSTER_REPO_WITH_SEED_PROMPT.format(
-            seed_modules=formatted_seed,
-            potential_core_components=potential_core_components
-        )
-        logger.info(f"Using seeded clustering with {len(seed_modules)} existing modules")
-    elif current_module_tree == {}:
-        prompt = CLUSTER_REPO_PROMPT.format(potential_core_components=potential_core_components)
-    else:
-        # Format the module tree for context
-        lines = []
-
-        def _format_tree(tree: Dict[str, Any], indent: int = 0):
-            for key, value in tree.items():
-                if key == current_module_name:
-                    lines.append(f"{'  ' * indent}{key} (current module)")
-                else:
-                    lines.append(f"{'  ' * indent}{key}")
-                lines.append(f"{'  ' * (indent + 1)} Core components: {', '.join(value.get('components', []))}")
-                children = value.get("children", {})
-                if isinstance(children, dict) and len(children) > 0:
-                    lines.append(f"{'  ' * (indent + 1)} Children:")
-                    _format_tree(children, indent + 2)
-
-        _format_tree(current_module_tree, 0)
-        formatted_module_tree = "\n".join(lines)
-
-        prompt = CLUSTER_MODULE_PROMPT.format(
+    # Build the clustering prompt - use V2 advanced prompts by default for better reliability
+    if use_v2_prompts:
+        logger.info("Using V2 advanced prompt templates for clustering")
+        prompt = format_cluster_prompt_v2(
             potential_core_components=potential_core_components,
-            module_tree=formatted_module_tree,
+            module_tree=current_module_tree if current_module_tree else None,
             module_name=current_module_name,
+            seed_modules=seed_modules
         )
+        if seed_modules:
+            logger.info(f"Using seeded clustering with {len(seed_modules)} existing modules (V2 prompt)")
+    else:
+        # Legacy V1 prompts
+        if seed_modules:
+            # Use seed-aware prompt that preserves existing modules
+            formatted_seed = _format_seed_modules_for_prompt(seed_modules)
+            prompt = CLUSTER_REPO_WITH_SEED_PROMPT.format(
+                seed_modules=formatted_seed,
+                potential_core_components=potential_core_components
+            )
+            logger.info(f"Using seeded clustering with {len(seed_modules)} existing modules")
+        elif current_module_tree == {}:
+            prompt = CLUSTER_REPO_PROMPT.format(potential_core_components=potential_core_components)
+        else:
+            # Format the module tree for context
+            lines = []
+
+            def _format_tree(tree: Dict[str, Any], indent: int = 0):
+                for key, value in tree.items():
+                    if key == current_module_name:
+                        lines.append(f"{'  ' * indent}{key} (current module)")
+                    else:
+                        lines.append(f"{'  ' * indent}{key}")
+                    lines.append(f"{'  ' * (indent + 1)} Core components: {', '.join(value.get('components', []))}")
+                    children = value.get("children", {})
+                    if isinstance(children, dict) and len(children) > 0:
+                        lines.append(f"{'  ' * (indent + 1)} Children:")
+                        _format_tree(children, indent + 2)
+
+            _format_tree(current_module_tree, 0)
+            formatted_module_tree = "\n".join(lines)
+
+            prompt = CLUSTER_MODULE_PROMPT.format(
+                potential_core_components=potential_core_components,
+                module_tree=formatted_module_tree,
+                module_name=current_module_name,
+            )
 
     # Get timeout and path from config
     timeout = getattr(config, "claude_code_timeout", DEFAULT_CLAUDE_CODE_TIMEOUT)

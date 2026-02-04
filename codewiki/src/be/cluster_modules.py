@@ -9,6 +9,7 @@ from codewiki.src.be.llm_services import call_llm
 from codewiki.src.be.utils import count_tokens
 from codewiki.src.config import Config
 from codewiki.src.be.prompt_template import format_cluster_prompt
+from codewiki.src.be.prompt_template_v2 import format_cluster_prompt_v2
 
 
 def format_potential_core_components(leaf_nodes: List[str], components: Dict[str, Node]) -> tuple[str, str]:
@@ -48,7 +49,8 @@ def cluster_modules(
     current_module_tree: dict[str, Any] = {},
     current_module_name: str = None,
     current_module_path: List[str] = [],
-    seed_modules: Dict[str, Any] = None
+    seed_modules: Dict[str, Any] = None,
+    use_v2_prompts: bool = True
 ) -> Dict[str, Any]:
     """
     Cluster the potential core components into modules.
@@ -92,7 +94,8 @@ def cluster_modules(
                 current_module_tree={},
                 current_module_name=None,
                 current_module_path=[],
-                seed_modules=None  # Don't pass seed again to avoid recursion
+                seed_modules=None,  # Don't pass seed again to avoid recursion
+                use_v2_prompts=use_v2_prompts
             )
             # Merge new modules into result
             for module_name, module_info in new_modules.items():
@@ -110,7 +113,18 @@ def cluster_modules(
         logger.debug(f"Skipping clustering for {current_module_name} because the potential core components are too few: {count_tokens(potential_core_components_with_code)} tokens")
         return {}
 
-    prompt = format_cluster_prompt(potential_core_components, current_module_tree, current_module_name)
+    # Use V2 advanced prompts by default for better reliability
+    if use_v2_prompts:
+        prompt = format_cluster_prompt_v2(
+            potential_core_components,
+            module_tree=current_module_tree if current_module_tree else None,
+            module_name=current_module_name,
+            seed_modules=None  # Handled earlier in seeded clustering flow
+        )
+        logger.debug("Using V2 advanced prompt templates for clustering")
+    else:
+        prompt = format_cluster_prompt(potential_core_components, current_module_tree, current_module_name)
+
     response = call_llm(prompt, config, model=config.cluster_model)
 
     #parse the response
@@ -159,7 +173,10 @@ def cluster_modules(
         
         current_module_path.append(module_name)
         module_info["children"] = {}
-        module_info["children"] = cluster_modules(valid_sub_leaf_nodes, components, config, current_module_tree, module_name, current_module_path)
+        module_info["children"] = cluster_modules(
+            valid_sub_leaf_nodes, components, config, current_module_tree,
+            module_name, current_module_path, seed_modules=None, use_v2_prompts=use_v2_prompts
+        )
         current_module_path.pop()
 
     return module_tree
