@@ -47,6 +47,28 @@ cli.add_command(cluster_command, name="cluster")
 cli.add_command(document_command, name="document")
 
 
+@cli.command(name="mcp")
+def mcp_command():
+    """Start CodeWiki as an MCP (Model Context Protocol) server.
+
+    Exposes documentation generation tools via MCP stdio transport.
+    Configure in your MCP client (Claude, Cursor, etc.) as:
+
+    \b
+    {
+        "mcpServers": {
+            "codewiki": {
+                "command": "codewiki",
+                "args": ["mcp"]
+            }
+        }
+    }
+    """
+    import asyncio
+    from codewiki.mcp.server import main as mcp_main
+    asyncio.run(mcp_main())
+
+
 def main():
     """Entry point for the CLI."""
     try:

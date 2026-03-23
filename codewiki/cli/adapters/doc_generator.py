@@ -141,6 +141,8 @@ class CLIDocumentationGenerator:
                 main_model=self.config.get('main_model'),
                 cluster_model=self.config.get('cluster_model'),
                 fallback_model=self.config.get('fallback_model'),
+                provider=self.config.get('provider', 'openai-compatible'),
+                aws_region=self.config.get('aws_region', 'us-east-1'),
                 max_tokens=self.config.get('max_tokens', 32768),
                 max_token_per_module=self.config.get('max_token_per_module', 36369),
                 max_token_per_leaf_module=self.config.get('max_token_per_leaf_module', 16000),
@@ -284,7 +286,12 @@ class CLIDocumentationGenerator:
                     json.dump(output_data, f, indent=2)
 
                 if self.verbose:
-                    self.progress_tracker.update_stage(1.0, f"Found {len(leaf_nodes)} leaf nodes")
+                    self.progress_tracker.update_stage(0.8, f"Analyzed {len(components)} files, found {len(leaf_nodes)} leaf nodes")
+                    # Log individual files analyzed
+                    for comp_name in sorted(components.keys())[:20]:
+                        self.progress_tracker.update_stage(0.9, f"  File: {comp_name}")
+                    if len(components) > 20:
+                        self.progress_tracker.update_stage(0.9, f"  ... and {len(components) - 20} more files")
             except Exception as e:
                 raise APIError(f"Dependency analysis failed: {e}")
 
@@ -337,6 +344,8 @@ class CLIDocumentationGenerator:
             try:
                 if os.path.exists(first_module_tree_path):
                     module_tree = file_manager.load_json(first_module_tree_path)
+                    if self.verbose:
+                        self.progress_tracker.update_stage(0.5, "Loaded cached module tree")
                 else:
                     if use_claude_code:
                         # Use Claude Code CLI for clustering
@@ -356,6 +365,9 @@ class CLIDocumentationGenerator:
 
                 if self.verbose:
                     self.progress_tracker.update_stage(1.0, f"Created {len(module_tree)} modules")
+                    for mod_name in sorted(module_tree.keys()):
+                        file_count = len(module_tree[mod_name]) if isinstance(module_tree[mod_name], list) else "?"
+                        self.progress_tracker.update_stage(1.0, f"  Module: {mod_name} ({file_count} files)")
             except Exception as e:
                 raise APIError(f"Module clustering failed: {e}")
 
@@ -368,9 +380,12 @@ class CLIDocumentationGenerator:
             self.progress_tracker.update_stage(0.1, "Generating module documentation...")
         
         try:
+            if self.verbose:
+                self.progress_tracker.update_stage(0.2, f"Generating documentation for {self.job.module_count} modules...")
+
             # Run the actual documentation generation
             await doc_generator.generate_module_documentation(components, leaf_nodes)
-            
+
             if self.verbose:
                 self.progress_tracker.update_stage(0.9, "Creating repository overview...")
             

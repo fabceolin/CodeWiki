@@ -297,6 +297,8 @@ EXTENSION_TO_LANGUAGE = {
     ".cjs": "javascript",
     ".jsx": "javascript",
     ".cs": "csharp",
+    ".kt": "kotlin",
+    ".kts": "kotlin",
     ".php": "php",
     ".phtml": "php",
     ".inc": "php"
