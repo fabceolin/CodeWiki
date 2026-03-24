@@ -8,6 +8,7 @@ Exit Codes:
   3: Repository error (not a git repo, no code files)
   4: LLM API error (including rate limits)
   5: File system error (permissions, disk space)
+  42: No changes detected (--update mode; documentation is up to date)
 """
 
 import sys
@@ -22,6 +23,7 @@ EXIT_CONFIG_ERROR = 2
 EXIT_REPOSITORY_ERROR = 3
 EXIT_API_ERROR = 4
 EXIT_FILESYSTEM_ERROR = 5
+EXIT_NO_CHANGES = 42  # --update detected no changes; docs are up to date
 
 
 class CodeWikiError(Exception):

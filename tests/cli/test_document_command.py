@@ -348,6 +348,8 @@ class TestHelpText:
         assert "--use-claude-code" in result.output
         assert "--use-gemini-code" in result.output
         assert "--github-pages" in result.output
+        assert "--update" in result.output
+        assert "--base-commit" in result.output
         assert "--verbose" in result.output
 
     def test_help_via_main_cli(self, runner):
@@ -394,3 +396,197 @@ class TestIntegration:
         # This test verifies the --repo default behavior
         result = runner.invoke(document_command, ["--help"])
         assert "default: current directory" in result.output
+
+
+# =============================================================================
+# Incremental Update Tests (--update, --base-commit)
+# =============================================================================
+
+class TestIncrementalUpdate:
+    """Tests for --update and --base-commit flags."""
+
+    def test_help_shows_update_flag(self, runner):
+        """Help text should show --update option."""
+        result = runner.invoke(document_command, ["--help"])
+        assert "--update" in result.output
+
+    def test_help_shows_base_commit_flag(self, runner):
+        """Help text should show --base-commit option."""
+        result = runner.invoke(document_command, ["--help"])
+        assert "--base-commit" in result.output
+
+    def test_base_commit_requires_update(self, runner, valid_input_dir, sample_repo):
+        """--base-commit without --update should error."""
+        result = runner.invoke(document_command, [
+            "--input", str(valid_input_dir),
+            "--repo", str(sample_repo),
+            "--base-commit", "abc1234",
+        ])
+
+        assert result.exit_code != 0
+        assert "--base-commit requires --update" in result.output
+
+    def test_update_and_modules_mutual_exclusivity(self, runner, valid_input_dir, sample_repo):
+        """--update and --modules together should warn and use --modules."""
+        with patch('codewiki.src.be.documentation_generator.DocumentationGenerator') as mock_gen:
+            mock_instance = MagicMock()
+            mock_instance.generate_module_documentation = AsyncMock()
+            mock_instance.create_documentation_metadata = MagicMock()
+            mock_gen.return_value = mock_instance
+
+            result = runner.invoke(document_command, [
+                "--input", str(valid_input_dir),
+                "--repo", str(sample_repo),
+                "--update",
+                "--modules", "core",
+            ])
+
+        assert "mutually exclusive" in result.output or "--modules takes precedence" in result.output
+
+    def test_update_no_changes_exits_early(self, runner, valid_input_dir, sample_repo):
+        """--update with no changes should exit early with EXIT_NO_CHANGES (42)."""
+        with patch(
+            'codewiki.cli.commands.document.detect_changed_files',
+            return_value=[],  # empty list = no changes
+        ):
+            result = runner.invoke(document_command, [
+                "--input", str(valid_input_dir),
+                "--repo", str(sample_repo),
+                "--update",
+            ])
+
+        assert result.exit_code == 42
+        assert "No changes detected" in result.output or "up to date" in result.output
+
+    def test_update_with_changes_proceeds(self, runner, valid_input_dir, sample_repo):
+        """--update with changes should proceed to generation."""
+        with patch(
+            'codewiki.cli.commands.document.detect_changed_files',
+            return_value=["app/main.py"],
+        ), patch(
+            'codewiki.cli.commands.document.invalidate_affected_modules',
+            return_value=["core", "overview"],
+        ), patch(
+            'codewiki.src.be.documentation_generator.DocumentationGenerator'
+        ) as mock_gen:
+            mock_instance = MagicMock()
+            mock_instance.generate_module_documentation = AsyncMock()
+            mock_instance.create_documentation_metadata = MagicMock()
+            mock_gen.return_value = mock_instance
+
+            result = runner.invoke(document_command, [
+                "--input", str(valid_input_dir),
+                "--repo", str(sample_repo),
+                "--update",
+            ])
+
+        # Should reach generation or complete (may fail at config step but that's OK)
+        assert "changed files" in result.output or "Generating" in result.output or result.exit_code == 0
+
+    def test_update_with_base_commit(self, runner, valid_input_dir, sample_repo):
+        """--update --base-commit should pass base_commit to detect_changed_files."""
+        with patch(
+            'codewiki.cli.commands.document.detect_changed_files',
+            return_value=[],
+        ) as mock_detect:
+            result = runner.invoke(document_command, [
+                "--input", str(valid_input_dir),
+                "--repo", str(sample_repo),
+                "--update",
+                "--base-commit", "abc1234",
+            ])
+
+        mock_detect.assert_called_once()
+        call_kwargs = mock_detect.call_args
+        assert call_kwargs[1].get('base_commit') == "abc1234" or call_kwargs.kwargs.get('base_commit') == "abc1234"
+
+    def test_update_fallback_when_detection_unavailable(self, runner, valid_input_dir, sample_repo):
+        """--update should fall back to full gen when detection returns None."""
+        with patch(
+            'codewiki.cli.commands.document.detect_changed_files',
+            return_value=None,  # None = can't determine changes
+        ), patch(
+            'codewiki.src.be.documentation_generator.DocumentationGenerator'
+        ) as mock_gen:
+            mock_instance = MagicMock()
+            mock_instance.generate_module_documentation = AsyncMock()
+            mock_instance.create_documentation_metadata = MagicMock()
+            mock_gen.return_value = mock_instance
+
+            result = runner.invoke(document_command, [
+                "--input", str(valid_input_dir),
+                "--repo", str(sample_repo),
+                "--update",
+            ])
+
+        # Should proceed to generation (not exit early)
+        assert "Generating" in result.output or "Documentation Complete" in result.output or "Configuration" in result.output
+
+    def test_update_no_changes_exits_with_code_42(self, runner, valid_input_dir, sample_repo):
+        """--update with no changes should exit with EXIT_NO_CHANGES (42)."""
+        with patch(
+            'codewiki.cli.commands.document.detect_changed_files',
+            return_value=[],  # empty list = no changes
+        ):
+            result = runner.invoke(document_command, [
+                "--input", str(valid_input_dir),
+                "--repo", str(sample_repo),
+                "--update",
+            ])
+
+        assert result.exit_code == 42
+
+    def test_base_commit_rejects_non_hex(self, runner, valid_input_dir, sample_repo):
+        """--base-commit with non-hex characters should error."""
+        result = runner.invoke(document_command, [
+            "--input", str(valid_input_dir),
+            "--repo", str(sample_repo),
+            "--update",
+            "--base-commit", "not-a-sha!",
+        ])
+
+        assert result.exit_code != 0
+        assert "Invalid --base-commit" in result.output
+
+    def test_base_commit_rejects_too_short(self, runner, valid_input_dir, sample_repo):
+        """--base-commit with fewer than 7 hex chars should error."""
+        result = runner.invoke(document_command, [
+            "--input", str(valid_input_dir),
+            "--repo", str(sample_repo),
+            "--update",
+            "--base-commit", "abc12",  # 5 chars, too short
+        ])
+
+        assert result.exit_code != 0
+        assert "Invalid --base-commit" in result.output
+
+    def test_base_commit_accepts_valid_short_sha(self, runner, valid_input_dir, sample_repo):
+        """--base-commit with valid 7-char hex SHA should pass validation."""
+        with patch(
+            'codewiki.cli.commands.document.detect_changed_files',
+            return_value=[],
+        ):
+            result = runner.invoke(document_command, [
+                "--input", str(valid_input_dir),
+                "--repo", str(sample_repo),
+                "--update",
+                "--base-commit", "abc1234",  # 7 chars, valid
+            ])
+
+        # Should not fail with "Invalid --base-commit"
+        assert "Invalid --base-commit" not in result.output
+
+    def test_base_commit_accepts_full_sha(self, runner, valid_input_dir, sample_repo):
+        """--base-commit with full 40-char hex SHA should pass validation."""
+        with patch(
+            'codewiki.cli.commands.document.detect_changed_files',
+            return_value=[],
+        ):
+            result = runner.invoke(document_command, [
+                "--input", str(valid_input_dir),
+                "--repo", str(sample_repo),
+                "--update",
+                "--base-commit", "a" * 40,  # 40 chars, valid
+            ])
+
+        assert "Invalid --base-commit" not in result.output

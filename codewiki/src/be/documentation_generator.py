@@ -123,7 +123,7 @@ class DocumentationGenerator:
             logger.warning(f"Could not list generated files: {e}")
         
         metadata_path = os.path.join(working_dir, "metadata.json")
-        file_manager.save_json(metadata, metadata_path)
+        file_manager.save_json(metadata, metadata_path, atomic=True)
 
     
     def get_processing_order(self, module_tree: Dict[str, Any], parent_path: List[str] = []) -> List[tuple[List[str], str]]:
@@ -403,6 +403,11 @@ class DocumentationGenerator:
             logger.info(f"✓ Module docs already exists at {docs_path}")
             return module_tree
 
+        # Snapshot existing .md files before generation to detect new sub-docs
+        existing_md_files = set(
+            f for f in os.listdir(working_dir) if f.endswith(".md")
+        )
+
         try:
             # Generate documentation using Claude Code CLI
             doc_content = claude_code_generate_docs(
@@ -423,12 +428,77 @@ class DocumentationGenerator:
                 file_manager.save_text(doc_content, docs_path)
                 logger.info(f"✓ Generated documentation for {module_name}")
 
+            # Register sub-docs created by Claude Code as children in module_tree.
+            # Claude Code runs as an external process and may create additional .md
+            # files (sub-module docs) that are not tracked in module_tree.json.
+            self._register_sub_docs(
+                module_name, module_tree, working_dir, existing_md_files
+            )
+
             return module_tree
 
         except Exception as e:
             logger.error(f"Claude Code documentation generation failed for {module_name}: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             raise
+
+    def _register_sub_docs(
+        self,
+        module_name: str,
+        module_tree: Dict[str, Any],
+        working_dir: str,
+        existing_md_files: Set[str],
+    ) -> None:
+        """
+        Detect .md files created by Claude Code during module generation and
+        register them as children in module_tree so that incremental updates
+        can invalidate and regenerate them properly.
+
+        Only files whose name starts with ``module_name`` (e.g.
+        ``tender_requests_status.md`` for parent ``tender_requests``) are
+        considered sub-docs of this module.
+        """
+        current_md_files = set(
+            f for f in os.listdir(working_dir) if f.endswith(".md")
+        )
+        new_md_files = current_md_files - existing_md_files
+
+        if not new_md_files:
+            return
+
+        # The parent's own .md is not a sub-doc
+        parent_filename = f"{module_name}.md"
+        new_md_files.discard(parent_filename)
+
+        if not new_md_files:
+            return
+
+        # Ensure the parent module entry exists in tree
+        if module_name not in module_tree:
+            return
+
+        parent_info = module_tree[module_name]
+        if "children" not in parent_info:
+            parent_info["children"] = {}
+
+        registered = []
+        for md_file in sorted(new_md_files):
+            sub_name = md_file[:-3]  # strip .md
+            if sub_name not in parent_info["children"]:
+                parent_info["children"][sub_name] = {
+                    "components": [],
+                    "children": {},
+                }
+                registered.append(sub_name)
+
+        if registered:
+            # Persist updated module_tree to disk immediately
+            module_tree_path = os.path.join(working_dir, MODULE_TREE_FILENAME)
+            file_manager.save_json(module_tree, module_tree_path)
+            logger.info(
+                f"Registered {len(registered)} sub-docs as children of "
+                f"{module_name}: {', '.join(registered)}"
+            )
 
     async def run(self) -> None:
         """Run the complete documentation generation process using dynamic programming."""

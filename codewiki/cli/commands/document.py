@@ -19,11 +19,14 @@ from codewiki.cli.utils.errors import (
     APIError,
     handle_error,
     EXIT_SUCCESS,
+    EXIT_NO_CHANGES,
 )
 from codewiki.cli.utils.repo_validator import (
     validate_repository,
     check_writable_output,
+    get_git_commit_hash,
 )
+from codewiki.cli.utils.change_detection import detect_changed_files, invalidate_affected_modules
 from codewiki.cli.utils.logging import create_logger
 from codewiki.src.config import (
     Config,
@@ -115,6 +118,17 @@ def validate_module_tree_schema(data: dict) -> bool:
     help="Generate index.html for GitHub Pages deployment",
 )
 @click.option(
+    "--update",
+    is_flag=True,
+    help="Incremental update: only regenerate modules affected by changes since last generation",
+)
+@click.option(
+    "--base-commit",
+    type=str,
+    default=None,
+    help="Base commit SHA for change detection (overrides metadata.json commit_id). Requires --update.",
+)
+@click.option(
     "--verbose",
     "-v",
     is_flag=True,
@@ -131,6 +145,8 @@ def document_command(
     use_claude_code: bool,
     use_gemini_code: bool,
     github_pages: bool,
+    update: bool,
+    base_commit: Optional[str],
     verbose: bool,
 ):
     """
@@ -180,6 +196,14 @@ def document_command(
     \b
     # Verbose output for debugging
     $ codewiki document --input ./docs --verbose
+
+    \b
+    # Incremental update: regenerate only changed modules
+    $ codewiki document --input ./docs --update --verbose
+
+    \b
+    # Incremental update with explicit base commit
+    $ codewiki document --input ./docs --update --base-commit abc1234 --verbose
     """
     logger = create_logger(verbose=verbose)
 
@@ -187,6 +211,30 @@ def document_command(
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
     try:
+        # Validate --base-commit requires --update
+        if base_commit and not update:
+            raise ConfigurationError(
+                "--base-commit requires --update.\n\n"
+                "Use: codewiki document --update --base-commit <SHA> ..."
+            )
+
+        # Validate --base-commit SHA format (hex string, 7-40 characters)
+        if base_commit:
+            import re
+            if not re.fullmatch(r'[0-9a-fA-F]{7,40}', base_commit):
+                raise ConfigurationError(
+                    f"Invalid --base-commit value: '{base_commit}'\n\n"
+                    "Expected a hex SHA (7-40 characters), e.g. 'abc1234' or a full 40-char hash."
+                )
+
+        # Validate --update and --modules mutual exclusivity
+        if update and modules:
+            logger.warning(
+                "--update and --modules are mutually exclusive. "
+                "--modules takes precedence; --update is ignored."
+            )
+            update = False
+
         # Step 1: Validate configuration
         logger.step("Validating configuration...", 1, 5)
 
@@ -357,6 +405,34 @@ def document_command(
 
         logger.success(f"Output directory: {output_dir}")
 
+        # Incremental update: detect changed files and selectively regenerate
+        if update:
+            if verbose:
+                if base_commit:
+                    logger.debug(f"Base commit (override): {base_commit}")
+                else:
+                    logger.debug("Base commit: from metadata.json")
+
+            changed_files = detect_changed_files(
+                repo_path, output_dir, cli_logger=logger, verbose=verbose,
+                base_commit=base_commit,
+            )
+            if changed_files is not None and len(changed_files) == 0:
+                logger.success("No changes detected since last generation. Documentation is up to date.")
+                sys.exit(EXIT_NO_CHANGES)
+            if changed_files is not None:
+                logger.info(f"  Detected {len(changed_files)} changed files — regenerating affected modules.")
+                invalidated = invalidate_affected_modules(
+                    output_dir, changed_files, cli_logger=logger, verbose=verbose,
+                )
+                if verbose and invalidated:
+                    logger.debug(f"Modules to regenerate ({len(invalidated)}):")
+                    for mod in invalidated:
+                        logger.debug(f"  - {mod}")
+            elif changed_files is None:
+                if verbose:
+                    logger.debug("Change detection unavailable — falling back to full generation.")
+
         # Step 5: Generate documentation
         logger.step("Generating documentation...", 5, 5)
 
@@ -423,7 +499,9 @@ def document_command(
         # Run documentation generation
         from codewiki.src.be.documentation_generator import DocumentationGenerator
 
-        doc_generator = DocumentationGenerator(backend_config)
+        # Capture current HEAD commit hash for metadata tracking
+        commit_id = get_git_commit_hash(repo_path)
+        doc_generator = DocumentationGenerator(backend_config, commit_id=commit_id or None)
 
         try:
             asyncio.run(doc_generator.generate_module_documentation(components, leaf_nodes))

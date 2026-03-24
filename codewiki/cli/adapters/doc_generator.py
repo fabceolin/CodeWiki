@@ -17,6 +17,7 @@ import sys
 from codewiki.cli.utils.progress import ProgressTracker
 from codewiki.cli.models.job import DocumentationJob, LLMConfig
 from codewiki.cli.utils.errors import APIError
+from codewiki.cli.utils.repo_validator import get_git_commit_hash
 
 # Import backend modules
 from codewiki.src.be.documentation_generator import DocumentationGenerator
@@ -132,6 +133,9 @@ class CLIDocumentationGenerator:
             # Set CLI context for backend
             set_cli_context(True)
             
+            # Capture current HEAD commit hash for metadata tracking
+            self._commit_id = get_git_commit_hash(self.repo_path) or None
+
             # Create backend config with CLI settings
             backend_config = BackendConfig.from_cli(
                 repo_path=str(self.repo_path),
@@ -236,7 +240,7 @@ class CLIDocumentationGenerator:
             self.progress_tracker.complete_stage()
 
             # Create documentation generator with loaded components
-            doc_generator = DocumentationGenerator(backend_config)
+            doc_generator = DocumentationGenerator(backend_config, commit_id=self._commit_id)
         else:
             # Full dependency analysis
             self.progress_tracker.start_stage(1, "Phase 1/3: Dependency Analysis")
@@ -244,7 +248,7 @@ class CLIDocumentationGenerator:
                 self.progress_tracker.update_stage(0.2, "Initializing dependency analyzer...")
 
             # Create documentation generator
-            doc_generator = DocumentationGenerator(backend_config)
+            doc_generator = DocumentationGenerator(backend_config, commit_id=self._commit_id)
 
             if self.verbose:
                 self.progress_tracker.update_stage(0.5, "Parsing source files...")

@@ -62,9 +62,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_CLAUDE_CODE_TIMEOUT = 900
 
 # Default max prompt size (in estimated tokens)
-# Claude Code CLI limit is ~790K chars (~198K tokens)
-# Setting to 180K to leave room for response and system prompt
-DEFAULT_MAX_PROMPT_TOKENS = 180_000
+# Claude Code CLI with Opus 4.6 supports ~1M token context
+# Setting to 800K to leave room for response and system prompt
+DEFAULT_MAX_PROMPT_TOKENS = 800_000
 
 # Debug mode - set CODEWIKI_DEBUG=1 to enable debug output
 DEBUG_MODE = os.environ.get("CODEWIKI_DEBUG", "").lower() in ("1", "true", "yes")

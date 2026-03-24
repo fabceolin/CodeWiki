@@ -16,10 +16,33 @@ class FileManager:
         os.makedirs(path, exist_ok=True)
     
     @staticmethod
-    def save_json(data: Any, filepath: str) -> None:
-        """Save data as JSON to file."""
-        with open(filepath, 'w') as f:
-            json.dump(data, f, indent=4)
+    def save_json(data: Any, filepath: str, atomic: bool = False) -> None:
+        """Save data as JSON to file.
+
+        Args:
+            data: Data to serialize as JSON.
+            filepath: Destination file path.
+            atomic: When True, write to a temporary file first then rename,
+                    preventing corruption if the process is interrupted mid-write.
+        """
+        if atomic:
+            import tempfile
+            dir_name = os.path.dirname(filepath) or "."
+            fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
+            try:
+                with os.fdopen(fd, 'w') as f:
+                    json.dump(data, f, indent=4)
+                os.replace(tmp_path, filepath)
+            except BaseException:
+                # Clean up temp file on any failure
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+        else:
+            with open(filepath, 'w') as f:
+                json.dump(data, f, indent=4)
     
     @staticmethod
     def load_json(filepath: str) -> Optional[Dict[str, Any]]:
