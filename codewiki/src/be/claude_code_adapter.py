@@ -250,6 +250,11 @@ def _invoke_claude_code(
             logger.warning(f"Claude Code CLI stderr: {result.stderr[:500]}")
 
         if result.returncode != 0:
+            logger.error(f"Claude Code CLI failed with exit code {result.returncode}")
+            if result.stderr:
+                logger.error(f"Claude Code CLI stderr (full): {result.stderr[:2000]}")
+            if result.stdout:
+                logger.error(f"Claude Code CLI stdout (tail): {result.stdout[-500:]}")
             raise ClaudeCodeError(
                 f"Claude Code CLI returned non-zero exit code: {result.returncode}",
                 returncode=result.returncode,

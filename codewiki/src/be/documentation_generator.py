@@ -267,6 +267,8 @@ class DocumentationGenerator:
 
                 except Exception as e:
                     logger.error(f"Failed to process module {module_key}: {str(e)}")
+                    if hasattr(e, 'stderr') and e.stderr:
+                        logger.error(f"Claude Code stderr: {e.stderr}")
                     logger.error(f"Traceback: {traceback.format_exc()}")
                     continue
 
@@ -439,6 +441,8 @@ class DocumentationGenerator:
 
         except Exception as e:
             logger.error(f"Claude Code documentation generation failed for {module_name}: {e}")
+            if hasattr(e, 'stderr') and e.stderr:
+                logger.error(f"Claude Code stderr: {e.stderr}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             raise
 
