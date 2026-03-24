@@ -217,6 +217,16 @@ def prune_removed_modules(
     except (json.JSONDecodeError, OSError):
         return []
 
+    # Use first_module_tree.json for component lookups — it contains only
+    # core (primary) components per module, not transitive dependencies.
+    # module_tree.json gets inflated with shared deps during generation,
+    # which would prevent pruning even when all module-specific source is gone.
+    first_tree_path = output_dir / "first_module_tree.json"
+    try:
+        first_tree = json.loads(first_tree_path.read_text()) if first_tree_path.exists() else {}
+    except (json.JSONDecodeError, OSError):
+        first_tree = {}
+
     pruned = []
 
     for mod_name in invalidated_modules:
@@ -226,7 +236,9 @@ def prune_removed_modules(
         if mod_info is None:
             continue
 
-        components = mod_info.get("components", [])
+        # Prefer core components from first_module_tree, fall back to module_tree
+        first_mod = first_tree.get(mod_name, {})
+        components = first_mod.get("components", []) or mod_info.get("components", [])
         if not components:
             # Sub-doc children registered by _register_sub_docs have empty
             # components — they are cleaned up when their parent is pruned.
