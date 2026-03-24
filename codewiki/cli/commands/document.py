@@ -26,7 +26,7 @@ from codewiki.cli.utils.repo_validator import (
     check_writable_output,
     get_git_commit_hash,
 )
-from codewiki.cli.utils.change_detection import detect_changed_files, invalidate_affected_modules
+from codewiki.cli.utils.change_detection import detect_changed_files, invalidate_affected_modules, prune_removed_modules
 from codewiki.cli.utils.logging import create_logger
 from codewiki.src.config import (
     Config,
@@ -425,6 +425,15 @@ def document_command(
                 invalidated = invalidate_affected_modules(
                     output_dir, changed_files, cli_logger=logger, verbose=verbose,
                 )
+                # Prune modules whose source files no longer exist
+                pruned = prune_removed_modules(
+                    output_dir, repo_path, invalidated,
+                    cli_logger=logger, verbose=verbose,
+                )
+                if pruned:
+                    # Remove pruned modules from the regeneration list
+                    invalidated = [m for m in invalidated if m not in pruned]
+
                 if verbose and invalidated:
                     logger.debug(f"Modules to regenerate ({len(invalidated)}):")
                     for mod in invalidated:

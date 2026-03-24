@@ -176,6 +176,145 @@ def invalidate_affected_modules(
     return sorted(modules_to_invalidate)
 
 
+def prune_removed_modules(
+    output_dir: Path,
+    repo_path: Path,
+    invalidated_modules: List[str],
+    cli_logger=None,
+    verbose: bool = False,
+) -> List[str]:
+    """
+    Remove modules from module_tree.json whose source components no longer
+    exist in the repository.
+
+    When source files are deleted, ``invalidate_affected_modules`` correctly
+    detects them and removes the cached ``.md`` docs, but the module entry
+    remains in ``module_tree.json``.  The generator then tries to regenerate
+    documentation for code that no longer exists.
+
+    This function checks each invalidated module's components against the
+    filesystem and removes modules where **no** component source file can be
+    found, preventing useless (or broken) regeneration attempts.
+
+    Args:
+        output_dir: Documentation output directory (contains module_tree.json).
+        repo_path: Root of the source repository.
+        invalidated_modules: Module names returned by ``invalidate_affected_modules``.
+        cli_logger: Optional CLI logger.
+        verbose: Show detailed output.
+
+    Returns:
+        List of module names that were pruned (removed from tree).
+    """
+    log = cli_logger or logger
+
+    module_tree_path = output_dir / "module_tree.json"
+    if not module_tree_path.exists():
+        return []
+
+    try:
+        module_tree = json.loads(module_tree_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return []
+
+    pruned = []
+
+    for mod_name in invalidated_modules:
+        if mod_name == "overview":
+            continue
+        mod_info = module_tree.get(mod_name)
+        if mod_info is None:
+            continue
+
+        components = mod_info.get("components", [])
+        if not components:
+            # Sub-doc children registered by _register_sub_docs have empty
+            # components — they are cleaned up when their parent is pruned.
+            continue
+
+        # Check if at least one component's source file still exists
+        has_live_source = False
+        for comp in components:
+            source_path = _resolve_component_path(comp, repo_path)
+            if source_path and source_path.exists():
+                has_live_source = True
+                break
+
+        if not has_live_source:
+            # Remove module and its children docs from disk
+            _remove_module_docs(mod_name, mod_info, output_dir, log, verbose)
+            # Remove from tree
+            del module_tree[mod_name]
+            pruned.append(mod_name)
+            if verbose:
+                log.debug(f"Pruned removed module: {mod_name} (no source files found)")
+
+    if pruned:
+        module_tree_path.write_text(json.dumps(module_tree, indent=2))
+        log.info(f"Pruned {len(pruned)} removed modules from module_tree.json")
+
+    return pruned
+
+
+def _remove_module_docs(
+    mod_name: str,
+    mod_info: dict,
+    output_dir: Path,
+    log,
+    verbose: bool,
+) -> None:
+    """Delete .md files for a module and all its children recursively."""
+    doc_path = output_dir / f"{mod_name}.md"
+    if doc_path.exists():
+        doc_path.unlink()
+        if verbose:
+            log.debug(f"Removed doc: {doc_path.name}")
+
+    for child_name, child_info in mod_info.get("children", {}).items():
+        _remove_module_docs(child_name, child_info, output_dir, log, verbose)
+
+
+def _resolve_component_path(component: str, repo_path: Path) -> Optional[Path]:
+    """
+    Try to resolve a component ID to a file path on disk.
+
+    Component IDs can be:
+    - File paths: "app/Services/Auth/AuthService.php"
+    - Dot-separated: "App.Services.Auth.AuthService.getUser"
+    """
+    # If it looks like a file path, try directly
+    if "/" in component:
+        candidate = repo_path / component
+        if candidate.suffix:  # has file extension
+            return candidate
+
+    # Dot-separated class name → try converting to path
+    if "." in component and "/" not in component:
+        parts = component.split(".")
+        # Strip trailing method name (camelCase)
+        path_parts = []
+        for part in parts:
+            path_parts.append(part)
+            if len(path_parts) > 1 and part[0:1].isupper():
+                idx = parts.index(part) if parts.count(part) == 1 else -1
+                if idx >= 0 and idx + 1 < len(parts) and parts[idx + 1][0:1].islower():
+                    break
+
+        # Try common extensions
+        base = "/".join(path_parts)
+        for ext in (".php", ".py", ".js", ".ts", ".java", ".cs"):
+            candidate = repo_path / (base + ext)
+            if candidate.exists():
+                return candidate
+            # Also try lowercase first segment (app/ instead of App/)
+            alt_base = path_parts[0].lower() + "/" + "/".join(path_parts[1:])
+            candidate = repo_path / (alt_base + ext)
+            if candidate.exists():
+                return candidate
+
+    return None
+
+
 def _build_changed_files_index(changed_files: set) -> dict:
     """
     Pre-compute lookup structures from changed files for O(1) path matching.
