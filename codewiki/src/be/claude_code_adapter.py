@@ -226,9 +226,9 @@ def _invoke_claude_code(
     # Build command - use --print for non-interactive mode
     # --dangerously-skip-permissions allows automated execution without interactive prompts
     # Prompt is passed via stdin to handle large prompts (CLI args have size limits)
-    # Use --model to select a specific model (default: claude-opus-4-6 for 1M context)
+    # Use --model to select a specific model (default: claude-opus-4-6[1m] for 1M context)
     import os
-    model = os.environ.get("CODEWIKI_CLAUDE_MODEL", "claude-opus-4-6")
+    model = os.environ.get("CODEWIKI_CLAUDE_MODEL", "claude-opus-4-6[1m]")
     cmd = [cli_path, "--print", "--dangerously-skip-permissions", "--model", model, "-p", "-"]
 
     logger.info(f"Invoking Claude Code CLI: {cli_path}")
