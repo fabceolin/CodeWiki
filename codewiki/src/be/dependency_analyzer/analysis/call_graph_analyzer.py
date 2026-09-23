@@ -9,6 +9,7 @@ across different programming languages in a repository.
 import logging
 import re
 import signal
+import threading
 import time
 import traceback
 from collections import defaultdict
@@ -33,25 +34,28 @@ class TimeoutError(Exception):
 
 @contextmanager
 def timeout(seconds):
-    """Context manager for timeout on file parsing."""
+    """Context manager for timeout on file parsing.
+
+    SIGALRM only exists on Unix and can only be installed from the main
+    thread.  Anywhere else (Windows, worker threads such as the MCP server's
+    ``asyncio.to_thread`` pool) the body runs without a timeout instead of
+    failing -- previously ``signal.signal`` raised from a worker thread and
+    the per-file ``except Exception`` silently skipped every file.
+    """
+    if not hasattr(signal, "SIGALRM") or threading.current_thread() is not threading.main_thread():
+        yield
+        return
 
     def signal_handler(signum, frame):
         raise TimeoutError(f"File parsing exceeded {seconds}s timeout")
 
-    # Only use signal on Unix systems (not Windows)
+    old_handler = signal.signal(signal.SIGALRM, signal_handler)
+    signal.alarm(seconds)
     try:
-        old_handler = signal.signal(signal.SIGALRM, signal_handler)
-        signal.alarm(seconds)
-        yield
-    except AttributeError:
-        # Windows doesn't support SIGALRM, skip timeout
         yield
     finally:
-        try:
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, old_handler)
-        except (AttributeError, ValueError):
-            pass
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
 
 
 class CallGraphAnalyzer:
