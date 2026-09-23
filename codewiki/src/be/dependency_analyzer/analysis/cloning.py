@@ -88,6 +88,7 @@ def clone_repository(github_url: str) -> str:
                         "true",
                     ],
                     capture_output=True,
+                    stdin=subprocess.DEVNULL,
                     text=True,
                 )
             except Exception:
@@ -105,6 +106,7 @@ def clone_repository(github_url: str) -> str:
             ],
             check=True,
             capture_output=True,
+            stdin=subprocess.DEVNULL,
             text=True,
             timeout=300,
         )
@@ -121,6 +123,7 @@ def clone_repository(github_url: str) -> str:
                         "true",
                     ],
                     capture_output=True,
+                    stdin=subprocess.DEVNULL,
                     text=True,
                 )
 
@@ -144,6 +147,7 @@ def clone_repository(github_url: str) -> str:
                         "HEAD",
                     ],
                     capture_output=True,
+                    stdin=subprocess.DEVNULL,
                     text=True,
                 )
             except Exception:
