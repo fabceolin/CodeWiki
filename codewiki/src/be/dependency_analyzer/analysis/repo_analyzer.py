@@ -54,6 +54,7 @@ class GitIgnoreFilter:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                stdin=subprocess.DEVNULL,
             )
             if root_result.returncode != 0:
                 logger.debug(
@@ -82,6 +83,7 @@ class GitIgnoreFilter:
                 check=True,
                 capture_output=True,
                 timeout=30,
+                stdin=subprocess.DEVNULL,
             )
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
             logger.warning(

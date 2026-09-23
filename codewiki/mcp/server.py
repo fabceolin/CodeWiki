@@ -372,6 +372,9 @@ async def list_tools() -> list[Tool]:
     return _fine_grained_tools() + _legacy_tools()
 
 
+_analyze_lock = asyncio.Lock()
+
+
 @server.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Route tool calls to the appropriate handler."""
@@ -382,10 +385,13 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         if name == "analyze_repo":
             from codewiki.mcp.tools.analysis import handle_analyze_repo
 
-            # NOTE: Tree-sitter C extensions are not thread-safe, so this
-            # must run on the main thread (blocking the event loop is
-            # acceptable for this one-time heavy operation).
-            return [_text(handle_analyze_repo(arguments, _store))]
+            # Offloaded to a thread so the long-running analysis does not
+            # block the stdio pump.  The lock serialises concurrent
+            # analyze_repo calls: each analyzer owns its own Tree-sitter
+            # Parser, but parsers are not safe to drive from several
+            # threads at once and the job is heavy anyway.
+            async with _analyze_lock:
+                return [_text(await asyncio.to_thread(handle_analyze_repo, arguments, _store))]
 
         elif name == "read_code_components":
             from codewiki.mcp.tools.code_reader import handle_read_code_components
