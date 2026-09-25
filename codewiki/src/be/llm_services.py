@@ -13,7 +13,7 @@ from typing import Optional
 
 from openai.types import chat
 
-from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, UnexpectedModelBehavior
+from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -254,11 +254,11 @@ def create_fallback_models(config: Config) -> FallbackModel:
     """Create fallback models chain from configuration."""
     main = create_main_model(config)
     fallback = create_fallback_model(config)
-    # Default fallback_on=(ModelAPIError,) does NOT cover UnexpectedModelBehavior, which
+    # Default fallback_on=(ModelHTTPError,) does NOT cover UnexpectedModelBehavior, which
     # is what pydantic-ai raises for a 200 response with a malformed/empty body (seen once
     # against OpenRouter: choices/model/object all None). Without this, that failure mode
     # skips the fallback model entirely and kills the module outright.
-    return FallbackModel(main, fallback, fallback_on=(ModelAPIError, UnexpectedModelBehavior))
+    return FallbackModel(main, fallback, fallback_on=(ModelHTTPError, UnexpectedModelBehavior))
 
 
 def create_openai_client(config: Config) -> OpenAI:
