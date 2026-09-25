@@ -351,10 +351,26 @@ class DocumentationGenerator:
                 prompt += "\n\n" + REPO_OVERVIEW_ARTIFACT_ADDENDUM.format(
                     artifact_index=artifact_index
                 )
+        # Unlike SYSTEM_PROMPT/LEAF_SYSTEM_PROMPT, neither MODULE_OVERVIEW_PROMPT nor
+        # REPO_OVERVIEW_PROMPT has a {custom_instructions} slot — without this, `--instructions`
+        # (language, audience, forbidden diagram styles, link rules) silently never reaches
+        # module-parent or repo-root overview generation. Passing it as a trailing addition to
+        # the single user-role prompt measurably failed to change output (confirmed empirically:
+        # still English, still the default structure). Passing it as its own system-role message
+        # is the fix that actually works for SYSTEM_PROMPT/LEAF_SYSTEM_PROMPT (both put
+        # `--instructions` in the Agent's system_prompt, not the user turn), so mirror that here.
+        prompt_addition = self.config.get_prompt_addition()
+        overview_system_prompt = (
+            f"<CUSTOM_INSTRUCTIONS>\n{prompt_addition}\n</CUSTOM_INSTRUCTIONS>\n\n"
+            "These instructions override any conflicting default in the user message below "
+            "(audience, language, structure, diagram style, and link format all included)."
+            if prompt_addition
+            else None
+        )
         logger.debug(f"Overview prompt for {module_name}: {len(prompt)} chars")
 
         try:
-            parent_docs = self.backend.complete(prompt)
+            parent_docs = self.backend.complete(prompt, system_prompt=overview_system_prompt)
             if not parent_docs:
                 raise RuntimeError(
                     f"LLM returned empty content for {module_name} overview "

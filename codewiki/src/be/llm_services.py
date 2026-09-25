@@ -308,7 +308,9 @@ def _extract_content(response, model: str) -> Optional[str]:
     return content
 
 
-def call_llm(prompt: str, config: Config, model: str = None) -> Optional[str]:
+def call_llm(
+    prompt: str, config: Config, model: str = None, system_prompt: str | None = None
+) -> Optional[str]:
     """
     Call LLM with the given prompt.
 
@@ -322,6 +324,13 @@ def call_llm(prompt: str, config: Config, model: str = None) -> Optional[str]:
         prompt: The prompt to send
         config: Configuration containing LLM settings
         model: Model name (defaults to config.main_model)
+        system_prompt: Optional system-role message. `--instructions` reaching a model
+            only as trailing text appended to a single user-role prompt (as opposed to a
+            dedicated system message, or a `<CUSTOM_INSTRUCTIONS>` block inside an actual
+            agent system_prompt) gets materially weaker adherence — confirmed empirically
+            on `MODULE_OVERVIEW_PROMPT`/`REPO_OVERVIEW_PROMPT` output (still English,
+            still the un-instructed default structure, after the instructions were
+            appended to the prompt string).
 
     Returns:
         LLM response text, or None when the provider returned no content
@@ -333,10 +342,10 @@ def call_llm(prompt: str, config: Config, model: str = None) -> Optional[str]:
     provider = getattr(config, "provider", "openai-compatible")
 
     if provider in ("bedrock", "anthropic"):
-        return _call_llm_via_litellm(prompt, config, model)
+        return _call_llm_via_litellm(prompt, config, model, system_prompt=system_prompt)
 
     if provider == "azure-openai":
-        return _call_llm_via_azure(prompt, config, model)
+        return _call_llm_via_azure(prompt, config, model, system_prompt=system_prompt)
 
     # Default: OpenAI-compatible
     client = create_openai_client(config)
@@ -347,9 +356,14 @@ def call_llm(prompt: str, config: Config, model: str = None) -> Optional[str]:
     primary_key = "max_completion_tokens" if use_completion_tokens else "max_tokens"
     fallback_key = "max_tokens" if use_completion_tokens else "max_completion_tokens"
 
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
     base_kwargs = {
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
     }
 
     try:
@@ -387,7 +401,9 @@ def _is_unsupported_token_param_error(err: BadRequestError, param: str) -> bool:
     return "unsupported parameter" in msg and param in msg
 
 
-def _call_llm_via_litellm(prompt: str, config: Config, model: str) -> Optional[str]:
+def _call_llm_via_litellm(
+    prompt: str, config: Config, model: str, system_prompt: str | None = None
+) -> Optional[str]:
     """
     Call LLM via litellm for Bedrock/Anthropic providers.
 
@@ -405,16 +421,23 @@ def _call_llm_via_litellm(prompt: str, config: Config, model: str) -> Optional[s
     elif config.provider == "anthropic":
         logger.debug("Calling Anthropic model %s via litellm", litellm_model)
 
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
     response = litellm.completion(
         model=litellm_model,
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
         max_tokens=config.max_tokens,
         api_key=config.llm_api_key if config.provider != "bedrock" else None,
     )
     return _extract_content(response, litellm_model)
 
 
-def _call_llm_via_azure(prompt: str, config: Config, model: str) -> Optional[str]:
+def _call_llm_via_azure(
+    prompt: str, config: Config, model: str, system_prompt: str | None = None
+) -> Optional[str]:
     """
     Call LLM via Azure OpenAI.
 
@@ -434,9 +457,14 @@ def _call_llm_via_azure(prompt: str, config: Config, model: str) -> Optional[str
         "Calling Azure OpenAI deployment %s (api_version=%s)", deployment, config.api_version
     )
 
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
     response = client.chat.completions.create(
         model=deployment,
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
         max_tokens=config.max_tokens,
     )
     return _extract_content(response, deployment)

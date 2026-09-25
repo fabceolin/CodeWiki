@@ -63,9 +63,10 @@ class PydanticAIBackend(LLMBackend):
         prompt: str,
         *,
         model: str | None = None,
+        system_prompt: str | None = None,
     ) -> str:
         pop_last_usage()
-        result = call_llm(prompt, self._config, model=model)
+        result = call_llm(prompt, self._config, model=model, system_prompt=system_prompt)
         self.last_usage = pop_last_usage()
         return result
 

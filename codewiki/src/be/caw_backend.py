@@ -246,18 +246,23 @@ class CawBackend(LLMBackend):
         prompt: str,
         *,
         model: str | None = None,
+        system_prompt: str | None = None,
     ) -> str:
         # Blocks the calling thread for the lifetime of the claude/codex
         # subprocess.  Callers running this from an async context (e.g. the
         # documentation_generator) accept this — there is no concurrent work
         # to do while clustering is in flight anyway.
         effective_model = model or self._model
+        # CawAgent has no separate system-role slot exposed here; best-effort
+        # fold it into the prompt rather than silently drop it (see
+        # llm_services.call_llm for the primary, tested path).
+        effective_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
         agent = CawAgent(
             provider=self._caw_provider,
             model=effective_model,
             tools=ToolGroup.READER,
         )
-        traj = agent.completion(prompt)
+        traj = agent.completion(effective_prompt)
         self.last_usage = usage_to_dict(getattr(traj, "total_usage", None))
         return traj.result
 
