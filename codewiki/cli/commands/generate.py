@@ -297,6 +297,12 @@ def _invalidate_affected_modules(output_dir: Path, changed_files: list[str], log
     help="Maximum depth for hierarchical decomposition (overrides config)",
 )
 @click.option(
+    "--request-limit",
+    type=int,
+    default=None,
+    help="Max model requests per agent run, raise for large/complex modules (overrides config)",
+)
+@click.option(
     "--prompt-caching/--no-prompt-caching",
     default=None,
     help="Add prompt-cache breakpoints to agentic LLM calls; auto-falls back to "
@@ -398,6 +404,7 @@ def generate_command(
     max_token_per_module: int | None,
     max_token_per_leaf_module: int | None,
     max_depth: int | None,
+    request_limit: int | None,
     prompt_caching: bool | None,
     artifacts: bool = True,
     artifact_token_budget: int = 200_000,
@@ -461,6 +468,10 @@ def generate_command(
     \b
     # Override max depth for hierarchical decomposition
     $ codewiki generate --max-depth 3
+
+    \b
+    # Raise the per-agent-run request limit for large/complex repos
+    $ codewiki generate --request-limit 200
     """
     print_banner()
     logger = create_logger(verbose=verbose)
@@ -638,6 +649,9 @@ def generate_command(
                 else config.max_token_per_leaf_module
             )
             effective_max_depth = max_depth if max_depth is not None else config.max_depth
+            effective_request_limit = (
+                request_limit if request_limit is not None else config.request_limit
+            )
             effective_use_gitignore = (
                 use_gitignore if use_gitignore is not None else config.use_gitignore
             )
@@ -648,6 +662,7 @@ def generate_command(
             logger.debug(f"Max token/module: {effective_max_token_per_module}")
             logger.debug(f"Max token/leaf module: {effective_max_token_per_leaf}")
             logger.debug(f"Max depth: {effective_max_depth}")
+            logger.debug(f"Request limit: {effective_request_limit}")
             logger.debug(f"Use gitignore: {effective_use_gitignore}")
             logger.debug(f"Prompt caching: {effective_prompt_caching}")
             logger.debug(
@@ -717,6 +732,10 @@ def generate_command(
                 else config.max_token_per_leaf_module,
                 # Max depth setting (runtime override takes precedence)
                 "max_depth": max_depth if max_depth is not None else config.max_depth,
+                # Request limit setting (runtime override takes precedence)
+                "request_limit": request_limit
+                if request_limit is not None
+                else config.request_limit,
                 # Gitignore setting (runtime override takes precedence)
                 "use_gitignore": use_gitignore
                 if use_gitignore is not None

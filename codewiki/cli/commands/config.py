@@ -52,6 +52,11 @@ def config_group():
     "--max-depth", type=int, help="Maximum depth for hierarchical decomposition (default: 2)"
 )
 @click.option(
+    "--request-limit",
+    type=int,
+    help="Max model requests per agent run, raise for large/complex modules (default: 100)",
+)
+@click.option(
     "--provider",
     type=click.Choice(
         [
@@ -97,6 +102,7 @@ def config_set(
     max_token_per_module: Optional[int],
     max_token_per_leaf_module: Optional[int],
     max_depth: Optional[int],
+    request_limit: Optional[int] = None,
     provider: Optional[str] = None,
     aws_region: Optional[str] = None,
     api_version: Optional[str] = None,
@@ -150,6 +156,10 @@ def config_set(
     $ codewiki config set --max-depth 3
 
     \b
+    # Raise the per-agent-run request limit for large/complex repos
+    $ codewiki config set --request-limit 200
+
+    \b
     # Persistently disable Git ignore filtering
     $ codewiki config set --no-gitignore
     """
@@ -166,6 +176,7 @@ def config_set(
                 max_token_per_module,
                 max_token_per_leaf_module,
                 max_depth,
+                request_limit,
                 provider,
                 aws_region,
                 api_version,
@@ -226,6 +237,11 @@ def config_set(
                 raise ConfigurationError("max_depth must be a positive integer")
             validated_data["max_depth"] = max_depth
 
+        if request_limit is not None:
+            if request_limit < 1:
+                raise ConfigurationError("request_limit must be a positive integer")
+            validated_data["request_limit"] = request_limit
+
         if provider is not None:
             validated_data["provider"] = provider
 
@@ -258,6 +274,7 @@ def config_set(
             max_token_per_module=validated_data.get("max_token_per_module"),
             max_token_per_leaf_module=validated_data.get("max_token_per_leaf_module"),
             max_depth=validated_data.get("max_depth"),
+            request_limit=validated_data.get("request_limit"),
             provider=validated_data.get("provider"),
             aws_region=validated_data.get("aws_region"),
             api_version=validated_data.get("api_version"),
@@ -310,6 +327,9 @@ def config_set(
 
         if max_depth:
             click.secho(f"✓ Max depth: {max_depth}", fg="green")
+
+        if request_limit:
+            click.secho(f"✓ Request limit: {request_limit}", fg="green")
 
         if provider:
             click.secho(f"✓ Provider: {provider}", fg="green")
@@ -384,6 +404,7 @@ def config_show(output_json: bool):
                 "max_token_per_module": config.max_token_per_module if config else 36369,
                 "max_token_per_leaf_module": config.max_token_per_leaf_module if config else 16000,
                 "max_depth": config.max_depth if config else 2,
+                "request_limit": config.request_limit if config else 100,
                 "use_gitignore": config.use_gitignore if config else True,
                 "prompt_caching": config.prompt_caching if config else True,
                 "agent_instructions": config.agent_instructions.to_dict()
@@ -444,6 +465,7 @@ def config_show(output_json: bool):
                 click.echo(f"  Max Tokens:              {config.max_tokens}")
                 click.echo(f"  Max Token/Module:        {config.max_token_per_module}")
                 click.echo(f"  Max Token/Leaf Module:   {config.max_token_per_leaf_module}")
+                click.echo(f"  Request Limit:           {config.request_limit}")
                 click.echo(f"  Prompt Caching:          {config.prompt_caching}")
 
             click.echo()

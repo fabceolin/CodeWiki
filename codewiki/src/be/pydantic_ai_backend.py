@@ -41,9 +41,8 @@ logger = logging.getLogger(__name__)
 # modules whose agent loop explores several components and/or spins off sub-module
 # docs via `generate_sub_module_documentation_tool`: on a real-world run (5,381-file
 # monorepo), 4 modules hit `UsageLimitExceeded` and were skipped outright with no
-# retry, no fallback, and no way to raise the limit from the CLI.
-_REQUEST_LIMIT = 100
-_AGENT_USAGE_LIMITS = UsageLimits(request_limit=_REQUEST_LIMIT)
+# retry, no fallback. `Config.request_limit` (default 100, see `codewiki/src/config.py`)
+# makes the limit adjustable from the CLI/config file instead of hardcoding it here.
 
 
 def _run_usage(result: Any) -> dict[str, Any] | None:
@@ -65,6 +64,7 @@ class PydanticAIBackend(LLMBackend):
         self._config = config
         self._fallback_models = create_fallback_models(config)
         self._custom_instructions = config.get_prompt_addition()
+        self._agent_usage_limits = UsageLimits(request_limit=config.request_limit)
         self.last_usage: dict[str, Any] | None = None
 
     def complete(
@@ -92,7 +92,7 @@ class PydanticAIBackend(LLMBackend):
             system_prompt=system_prompt,
         )
         started = time.time()
-        result = await agent.run(user_prompt, deps=deps, usage_limits=_AGENT_USAGE_LIMITS)
+        result = await agent.run(user_prompt, deps=deps, usage_limits=self._agent_usage_limits)
         seconds = time.time() - started
         usage = _run_usage(result)
         self.last_usage = usage
@@ -169,7 +169,7 @@ class PydanticAIBackend(LLMBackend):
                     module_tree=deps.module_tree,
                 ),
                 deps=deps,
-                usage_limits=_AGENT_USAGE_LIMITS,
+                usage_limits=self._agent_usage_limits,
             )
             self.last_usage = _run_usage(result)
             file_manager.save_json(deps.module_tree, module_tree_path)

@@ -30,6 +30,11 @@ DEFAULT_MAX_LEAF_NODES_PER_CLUSTER = 600
 # Artifact-aware generation: total token budget for build/CI/container/
 # manifest/config file contents added to the dependency graph.
 DEFAULT_ARTIFACT_TOKEN_BUDGET = 200_000
+# Max number of model requests per agent run (pydantic-ai's `UsageLimits.
+# request_limit`). pydantic-ai's own default of 50 is too low for complex
+# modules whose agent loop explores several components and/or spins off
+# sub-module docs via `generate_sub_module_documentation_tool`.
+DEFAULT_REQUEST_LIMIT = 100
 # Legacy constants (for backward compatibility)
 MAX_TOKEN_PER_MODULE = DEFAULT_MAX_TOKEN_PER_MODULE
 MAX_TOKEN_PER_LEAF_MODULE = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
@@ -91,6 +96,8 @@ class Config:
     max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE
     min_modules_for_super_grouping: int = DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING
     max_leaf_nodes_per_cluster: int = DEFAULT_MAX_LEAF_NODES_PER_CLUSTER
+    # Max model requests per agent run (see DEFAULT_REQUEST_LIMIT above)
+    request_limit: int = DEFAULT_REQUEST_LIMIT
     # Prompt caching for agentic/multi-turn calls (auto-disables per model if
     # the provider rejects cache_control markers)
     prompt_caching: bool = True
@@ -216,6 +223,7 @@ class Config:
         max_token_per_leaf_module: int = DEFAULT_MAX_TOKEN_PER_LEAF_MODULE,
         min_modules_for_super_grouping: int = DEFAULT_MIN_MODULES_FOR_SUPER_GROUPING,
         max_leaf_nodes_per_cluster: int = DEFAULT_MAX_LEAF_NODES_PER_CLUSTER,
+        request_limit: int = DEFAULT_REQUEST_LIMIT,
         max_depth: int = MAX_DEPTH,
         agent_instructions: dict[str, Any] | None = None,
         use_gitignore: bool = True,
@@ -247,6 +255,8 @@ class Config:
                 (0 or negative disables the pass)
             max_leaf_nodes_per_cluster: Partition clustering inputs into
                 structure-based batches of at most this many leaf nodes
+            request_limit: Max number of model requests per agent run
+                (pydantic-ai's `UsageLimits.request_limit`)
             max_depth: Maximum depth for hierarchical decomposition
             agent_instructions: Custom agent instructions dict
             use_gitignore: Whether to apply Git ignore rules
@@ -281,6 +291,7 @@ class Config:
             max_token_per_leaf_module=max_token_per_leaf_module,
             min_modules_for_super_grouping=min_modules_for_super_grouping,
             max_leaf_nodes_per_cluster=max_leaf_nodes_per_cluster,
+            request_limit=request_limit,
             agent_instructions=agent_instructions,
             use_gitignore=use_gitignore,
             prompt_caching=prompt_caching,
