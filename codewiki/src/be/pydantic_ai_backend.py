@@ -15,6 +15,7 @@ import traceback
 from typing import Any
 
 from pydantic_ai import Agent
+from pydantic_ai.usage import UsageLimits
 
 from codewiki.src.be.agent_tools.deps import CodeWikiDeps
 from codewiki.src.be.agent_tools.generate_sub_module_documentations import (
@@ -35,6 +36,14 @@ from codewiki.src.config import MODULE_TREE_FILENAME, OVERVIEW_FILENAME, Config
 from codewiki.src.utils import file_manager
 
 logger = logging.getLogger(__name__)
+
+# pydantic-ai's own default (`UsageLimits(request_limit=50)`) is too low for complex
+# modules whose agent loop explores several components and/or spins off sub-module
+# docs via `generate_sub_module_documentation_tool`: on a real-world run (5,381-file
+# monorepo), 4 modules hit `UsageLimitExceeded` and were skipped outright with no
+# retry, no fallback, and no way to raise the limit from the CLI.
+_REQUEST_LIMIT = 100
+_AGENT_USAGE_LIMITS = UsageLimits(request_limit=_REQUEST_LIMIT)
 
 
 def _run_usage(result: Any) -> dict[str, Any] | None:
@@ -83,7 +92,7 @@ class PydanticAIBackend(LLMBackend):
             system_prompt=system_prompt,
         )
         started = time.time()
-        result = await agent.run(user_prompt, deps=deps)
+        result = await agent.run(user_prompt, deps=deps, usage_limits=_AGENT_USAGE_LIMITS)
         seconds = time.time() - started
         usage = _run_usage(result)
         self.last_usage = usage
@@ -160,6 +169,7 @@ class PydanticAIBackend(LLMBackend):
                     module_tree=deps.module_tree,
                 ),
                 deps=deps,
+                usage_limits=_AGENT_USAGE_LIMITS,
             )
             self.last_usage = _run_usage(result)
             file_manager.save_json(deps.module_tree, module_tree_path)
